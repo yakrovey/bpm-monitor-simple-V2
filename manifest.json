@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Монитор задач BPM (V2 фон)",
+  "version": "2.2.1",
+  "description": "Монитор ПРЗ/ФРЗ/ПКМ: вкладки, таймеры, схемы. Данные только локально.",
+  "permissions": [
+    "alarms",
+    "notifications",
+    "storage",
+    "tabs",
+    "windows",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://workplace.ertelecom.ru/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://workplace.ertelecom.ru/ProcessPortal/dashboards/*",
+        "https://workplace.ertelecom.ru/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Монитор задач BPM V2"
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["help.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

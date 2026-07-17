@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Инструкция — Монитор BPM V2</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --text: #1a1a1a;
+      --muted: #5f6b76;
+      --accent: #1a73e8;
+      --line: #e3e8ee;
+      --ok: #2e7d32;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    header {
+      background: linear-gradient(135deg, #0d47a1, #1565c0 55%, #1a73e8);
+      color: #fff;
+      padding: 28px 20px 24px;
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    header p {
+      margin: 0;
+      opacity: 0.92;
+      font-size: 14px;
+      max-width: 720px;
+    }
+    main {
+      max-width: 820px;
+      margin: -12px auto 40px;
+      padding: 0 16px;
+    }
+    section {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-top: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      border: 1px solid var(--line);
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: #0d47a1;
+    }
+    h3 {
+      margin: 16px 0 8px;
+      font-size: 14px;
+      color: #1565c0;
+    }
+    ol, ul { margin: 0; padding-left: 1.25rem; }
+    li { margin: 6px 0; font-size: 14px; }
+    code, .path, .msg {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      background: #eef2f7;
+      padding: 1px 6px;
+      border-radius: 4px;
+      word-break: break-word;
+    }
+    .note {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #e8f5e9;
+      color: var(--ok);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .warn {
+      background: #fff8e1;
+      color: #8a6d00;
+    }
+    .colors {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chip {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: #111;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f0f4f8; font-weight: 600; }
+    .swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.12);
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 8px 16px 32px;
+      line-height: 1.6;
+    }
+    .copyright {
+      margin-top: 6px;
+      color: #90a4ae;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Монитор задач BPM V2</h1>
+    <p>Инструкция: вкладки ПРЗ/ФРЗ/ПКМ, сроки, цвета, уведомления и смена схем.</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>1. Установка</h2>
+      <ol>
+        <li>Откройте <code>chrome://extensions</code></li>
+        <li>Включите <strong>Режим разработчика</strong></li>
+        <li>Нажмите <strong>Загрузить распакованное расширение</strong> и выберите папку <span class="path">bpm-monitor-simple-V2</span></li>
+        <li>Разрешите уведомления для Chrome, если браузер спросит</li>
+      </ol>
+      <p class="note">После правок файлов нажимайте «Обновить» на карточке расширения.</p>
+    </section>
+
+    <section>
+      <h2>2. Первый запуск</h2>
+      <ol>
+        <li>Откройте дашборд <strong>Работа</strong> и войдите:<br>
+          <span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK</span>
+        </li>
+        <li>Вкладку можно свернуть, но <strong>не закрывайте</strong> — BPM сам подставляет задачи, расширение страницу не перезагружает</li>
+        <li>Иконка расширения → <strong>Проверить сейчас</strong></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>3. Что отслеживается</h2>
+      <ul>
+        <li>Только темы с <strong>ПРЗ</strong>, <strong>ФРЗ</strong> или <strong>ПКМ</strong></li>
+        <li>«Шаг 1.2 / 3.1 / 5.1» и прочие шаги <strong>игнорируются</strong></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>4. Вкладки ПРЗ / ФРЗ / ПКМ</h2>
+      <ul>
+        <li>В окне расширения три вкладки: <strong>ПРЗ</strong>, <strong>ФРЗ</strong>, <strong>ПКМ</strong></li>
+        <li>В каждой вкладке — только задачи этого шага</li>
+        <li>На кнопках вкладок цветные счётчики:
+          <div class="colors">
+            <span class="chip" style="background:#c8e6c9">зелёные</span>
+            <span class="chip" style="background:#fff59d">жёлтые</span>
+            <span class="chip" style="background:#ef9a9a">красные</span>
+            <span class="chip" style="background:#90caf9">синие (просрочка)</span>
+            <span class="chip" style="background:#fff;border-color:#bbb">белый — ВОЛС (если есть)</span>
+          </div>
+        </li>
+        <li>Число на счётчике = сколько заявок сейчас в этом цвете на шаге</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>5. Таймер и рабочее время</h2>
+      <ul>
+        <li>Отсчёт от <strong>даты/времени со страницы</strong> (как в мастер-системе)</li>
+        <li>Считается только <strong>пн–пт, 09:00–18:00</strong>; ночью и в выходные — пауза</li>
+        <li><strong>Сбор статуса</strong> — всегда; <strong>уведомления</strong> — только в рабочее время</li>
+        <li>В уведомлениях всегда есть <strong>клиент</strong> и <strong>адрес / название</strong></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>6. Смена схемы на ФРЗ и ПКМ</h2>
+      <p style="font-size:14px;margin:0 0 8px">На шагах <strong>ФРЗ</strong> и <strong>ПКМ</strong> можно сменить схему уведомлений и сроков. На <strong>ПРЗ</strong> схема одна — менять нечего.</p>
+      <ol>
+        <li>Откройте вкладку <strong>ФРЗ</strong> или <strong>ПКМ</strong></li>
+        <li>Нажмите на нужную задачу в списке</li>
+        <li>В окне «Сменить схему в уведомлении?» выберите:
+          <ul>
+            <li><strong>Обычная схема</strong> — стандартные сроки</li>
+            <li><strong>Радио</strong> — другие пороги и тексты уведомлений</li>
+            <li><strong>Схема 2 ВОЛС</strong> — таймер выключается, заявка белая; для ФРЗ — напоминание раз в 48 ч, для ПКМ — без уведомлений</li>
+          </ul>
+        </li>
+        <li>Нажмите <strong>Применить</strong></li>
+      </ol>
+      <p class="note">Текущая схема у задачи видна в карточке («Схема: Обычная / Радио / ВОЛС»).</p>
+    </section>
+
+    <section>
+      <h2>7. Сроки, цвета и уведомления</h2>
+      <p style="font-size:14px;color:#5f6b76;margin:0 0 8px">Ниже — <strong>рабочие часы</strong> от времени старта со страницы (кроме ВОЛС).</p>
+      <p class="note">Когда заявка <strong>становится синей</strong> (просрочка) на любом шаге — ПРЗ, ФРЗ или ПКМ — приходит уведомление <span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span> (один раз, в момент перехода). Уже просроченные на первом снимке не спамят.</p>
+
+      <h3>ПРЗ</h3>
+      <table>
+        <thead><tr><th>Срок</th><th>Цвет</th><th>Уведомление</th></tr></thead>
+        <tbody>
+          <tr><td>0 → 5 ч</td><td><span class="swatch" style="background:#c8e6c9"></span>зелёный</td><td>—</td></tr>
+          <tr><td>с 5 ч</td><td><span class="swatch" style="background:#fff59d"></span>жёлтый (до 7 ч)</td><td><span class="msg">прошло 5 часов, посмотри задачу</span></td></tr>
+          <tr><td>с 7 ч</td><td><span class="swatch" style="background:#ef9a9a"></span>красный (до 8 ч 30 мин)</td><td><span class="msg">время подходит к концу, срочно отработай задачу</span></td></tr>
+          <tr><td>после 8 ч 30 мин</td><td><span class="swatch" style="background:#90caf9"></span>синий</td><td><span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>ФРЗ — обычная</h3>
+      <table>
+        <thead><tr><th>Срок</th><th>Цвет</th><th>Уведомление</th></tr></thead>
+        <tbody>
+          <tr><td>0 → 8 ч</td><td><span class="swatch" style="background:#c8e6c9"></span>зелёный</td><td>—</td></tr>
+          <tr><td>с 8 ч</td><td><span class="swatch" style="background:#fff59d"></span>жёлтый (до 12 ч)</td><td><span class="msg">прошло 8 часов, посмотри заявку</span></td></tr>
+          <tr><td>с 12 ч</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">СРОЧНО ОТРАБОТАЙ ЗАЯВКУ</span></td></tr>
+          <tr><td>15:30 → 15:50</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОПАСНОСТЬ ПРОСРОКА</span> каждые 5 мин</td></tr>
+          <tr><td>15:50 → 15:59</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОПАСНОСТЬ ПРОСРОКА</span> каждые 2 мин</td></tr>
+          <tr><td>после 15:59</td><td><span class="swatch" style="background:#90caf9"></span>синий</td><td><span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>ФРЗ — радио</h3>
+      <table>
+        <thead><tr><th>Срок</th><th>Цвет</th><th>Уведомление</th></tr></thead>
+        <tbody>
+          <tr><td>0 → 8 ч</td><td><span class="swatch" style="background:#c8e6c9"></span>зелёный</td><td>—</td></tr>
+          <tr><td>с 8 ч</td><td><span class="swatch" style="background:#fff59d"></span>жёлтый (до 20 ч)</td><td><span class="msg">займись заявкой, проконтролируй ТО, если требуется</span></td></tr>
+          <tr><td>с 20 ч</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОСТАЛОСЬ 6 ЧАСОВ ДО ПРОСРОКА</span></td></tr>
+          <tr><td>26:30 → 26:50</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОПАСНОСТЬ ПРОСРОКА</span> каждые 5 мин</td></tr>
+          <tr><td>26:50 → 26:59</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОПАСНОСТЬ ПРОСРОКА</span> каждые 2 мин</td></tr>
+          <tr><td>после 26:59</td><td><span class="swatch" style="background:#90caf9"></span>синий</td><td><span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>ФРЗ — ВОЛС</h3>
+      <ul>
+        <li>Таймер выкл., цвет белый</li>
+        <li>Раз в 48 астрономических часов: <span class="msg">проверь, что там с заявкой</span></li>
+      </ul>
+
+      <h3>ПКМ — обычная</h3>
+      <table>
+        <thead><tr><th>Срок</th><th>Цвет</th><th>Уведомление</th></tr></thead>
+        <tbody>
+          <tr><td>появление</td><td><span class="swatch" style="background:#c8e6c9"></span>зелёный (до 2 ч)</td><td><span class="msg">на 5.1 новая заявка</span></td></tr>
+          <tr><td>с 2 ч</td><td><span class="swatch" style="background:#fff59d"></span>жёлтый (до 3 ч)</td><td><span class="msg">заявка на 5.1 уже 2 часа</span></td></tr>
+          <tr><td>с 3 ч</td><td><span class="swatch" style="background:#ef9a9a"></span>красный (до 4 ч)</td><td><span class="msg">на 5.1 ДО ПРОСРОКА ЗАЯВКИ 1 ЧАС</span></td></tr>
+          <tr><td>после 4 ч</td><td><span class="swatch" style="background:#90caf9"></span>синий</td><td><span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>ПКМ — радио</h3>
+      <table>
+        <thead><tr><th>Срок</th><th>Цвет</th><th>Уведомление</th></tr></thead>
+        <tbody>
+          <tr><td>0 → 6 ч</td><td><span class="swatch" style="background:#c8e6c9"></span>зелёный</td><td>—</td></tr>
+          <tr><td>с 6 ч</td><td><span class="swatch" style="background:#fff59d"></span>жёлтый (до 10 ч)</td><td><span class="msg">прошло 6 часов с момента появления заявки на 5.1 не забудь о ней</span></td></tr>
+          <tr><td>с 10 ч</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">СРОЧНО ВЫДАЙ ЗАЯВКУ В РАБОТУ!</span></td></tr>
+          <tr><td>13:45 → 13:59</td><td><span class="swatch" style="background:#ef9a9a"></span>красный</td><td><span class="msg">ОПАСНОСТЬ ПРОСРОКА</span> каждые 2 мин</td></tr>
+          <tr><td>после 13:59</td><td><span class="swatch" style="background:#90caf9"></span>синий</td><td><span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>ПКМ — ВОЛС</h3>
+      <ul>
+        <li>Таймер выкл., цвет белый</li>
+        <li>Уведомления не приходят</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>8. Кнопки</h2>
+      <ul>
+        <li><strong>Проверить сейчас</strong> — считать задачи с дашборда</li>
+        <li><strong>Открыть / показать вкладку BPM</strong> — перейти к «Работа»</li>
+        <li><strong>Инструкция</strong> — эта страница</li>
+      </ul>
+      <p class="note warn">Если список пуст: откройте дашборд «Работа», обновите расширение и снова нажмите «Проверить сейчас».</p>
+    </section>
+
+    <section>
+      <h2>9. Приватность</h2>
+      <ul>
+        <li>Данные только в браузере (<code>chrome.storage.local</code>)</li>
+        <li>Сеть — только <code>workplace.ertelecom.ru</code></li>
+        <li>На сторонние серверы ничего не уходит</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    Монитор BPM V2 · локальный режим<br>
+    <div class="copyright">made by krylov.iav</div>
+  </footer>
+</body>
+</html>

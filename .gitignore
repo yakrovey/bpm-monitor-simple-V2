@@ -1,0 +1,10 @@
+# Chrome extension local noise
+*.crx
+*.pem
+*.zip
+.DS_Store
+Thumbs.db
+node_modules/
+.idea/
+.vscode/
+*.log
