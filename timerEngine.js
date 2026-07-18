@@ -72,7 +72,7 @@ export function getSchemeConfig(family, scheme) {
       ranges: [
         { until: hours(5), zone: 'green' },
         { until: hours(7), zone: 'yellow' },
-        { until: hoursMinutes(8, 30), zone: 'red' }
+        { until: hours(9), zone: 'red' }
       ],
       milestones: [
         {
@@ -86,8 +86,17 @@ export function getSchemeConfig(family, scheme) {
           text: 'время подходит к концу, срочно отработай задачу'
         }
       ],
-      danger: null,
-      overdueAfter: hoursMinutes(8, 30),
+      // 8ч30–8ч45: каждые 5 мин; 8ч45–8ч59: каждые 2 мин; с 9ч — просрок
+      danger: {
+        from: hoursMinutes(8, 30),
+        mid: hoursMinutes(8, 45),
+        until: hoursMinutes(8, 59),
+        text: 'СРОЧНО ОТРАБОТАЙ ЗАЯВКУ',
+        textAfterMid: 'УГРОЗА ПРОСРОКА',
+        intervalBeforeMid: 5 * 60 * 1000,
+        intervalAfterMid: 2 * 60 * 1000
+      },
+      overdueAfter: hours(9),
       overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
     };
   }
@@ -406,16 +415,19 @@ export function collectDueNotifications(
   }
 
   if (config.danger && elapsed >= config.danger.from && elapsed < config.danger.until) {
-    const interval =
-      elapsed >= config.danger.mid
-        ? config.danger.intervalAfterMid
-        : config.danger.intervalBeforeMid;
+    const afterMid = elapsed >= config.danger.mid;
+    const interval = afterMid
+      ? config.danger.intervalAfterMid
+      : config.danger.intervalBeforeMid;
+    const dangerText = afterMid
+      ? config.danger.textAfterMid || config.danger.text
+      : config.danger.textBeforeMid || config.danger.text;
     if (!lastDangerAt || now - lastDangerAt >= interval) {
       const dangerKey = `danger_${Math.floor(elapsed / interval)}`;
       due.push({
         key: dangerKey,
         title: task.type,
-        message: buildNotifyBody(task, config.danger.text)
+        message: buildNotifyBody(task, dangerText)
       });
       lastDangerAt = now;
     }
