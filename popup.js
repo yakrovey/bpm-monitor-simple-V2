@@ -4,6 +4,7 @@ import {
   businessMsBetween,
   isWorkTime
 } from './businessTime.js';
+import { ext } from './extApi.js';
 
 const TARGET_URL =
   'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK';
@@ -259,8 +260,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadStatus() {
-    chrome.runtime.sendMessage({ action: 'getStatus' }, (response) => {
-      if (chrome.runtime.lastError || !response) {
+    ext.runtime.sendMessage({ action: 'getStatus' }, (response) => {
+      if (ext.runtime.lastError || !response) {
         statusEl.textContent = '● Ошибка';
         statusEl.style.background = '#f44336';
         return;
@@ -297,8 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadHistory() {
-    chrome.runtime.sendMessage({ action: 'getHistory' }, (response) => {
-      if (chrome.runtime.lastError) return;
+    ext.runtime.sendMessage({ action: 'getHistory' }, (response) => {
+      if (ext.runtime.lastError) return;
       renderHistory(response?.history || []);
     });
   }
@@ -335,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selected = schemeModal.querySelector('input[name="scheme"]:checked');
     if (!schemeTaskId || !selected) return;
 
-    chrome.runtime.sendMessage(
+    ext.runtime.sendMessage(
       { action: 'setScheme', taskId: schemeTaskId, scheme: selected.value },
       () => {
         schemeModal.classList.remove('open');
@@ -351,8 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
     checkBtn.disabled = true;
     showCheckResult('Идёт проверка страницы BPM, подождите…');
 
-    chrome.runtime.sendMessage({ action: 'manualCheck' }, (response) => {
-      const err = chrome.runtime.lastError;
+    ext.runtime.sendMessage({ action: 'manualCheck' }, (response) => {
+      const err = ext.runtime.lastError;
       loadStatus();
       loadHistory();
       checkBtn.disabled = false;
@@ -381,21 +382,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   openBtn.addEventListener('click', async () => {
-    const tabs = await chrome.tabs.query({
+    const tabs = await ext.tabs.query({
       url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
     });
     if (tabs[0]) {
-      await chrome.tabs.update(tabs[0].id, { active: true });
+      await ext.tabs.update(tabs[0].id, { active: true });
       if (tabs[0].windowId != null) {
-        await chrome.windows.update(tabs[0].windowId, { focused: true });
+        await ext.windows.update(tabs[0].windowId, { focused: true });
       }
       return;
     }
-    await chrome.tabs.create({ url: TARGET_URL, active: true });
+    await ext.tabs.create({ url: TARGET_URL, active: true });
   });
 
   helpBtn.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('help.html') });
+    ext.tabs.create({ url: ext.runtime.getURL('help.html') });
   });
 
   loadStatus();

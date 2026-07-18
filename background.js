@@ -8,9 +8,10 @@ import {
 } from './timerEngine.js';
 import { isWorkTime, parseRussianDateTime } from './businessTime.js';
 import { pageFindTasks } from './pageScrape.js';
+import { ext } from './extApi.js';
 
 // BPM Monitor V2 — фон + рабочие таймеры
-// Данные только локально: chrome.storage.local + workplace.ertelecom.ru
+// Данные только локально: ext.storage.local + workplace.ertelecom.ru
 
 const TARGET_URL =
   'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK';
@@ -29,7 +30,7 @@ let lastCheckMessage = null;
 let monitorStatus = 'starting';
 
 async function loadState() {
-  const data = await chrome.storage.local.get([
+  const data = await ext.storage.local.get([
     'knownIds',
     'activeTasks',
     'bootstrapped',
@@ -49,7 +50,7 @@ async function loadState() {
 }
 
 async function saveState(extra = {}) {
-  await chrome.storage.local.set({
+  await ext.storage.local.set({
     knownIds: Array.from(knownIds),
     activeTasks,
     bootstrapped,
@@ -98,7 +99,7 @@ function getTaskType(title) {
 }
 
 function createNotification(title, message) {
-  chrome.notifications.create({
+  ext.notifications.create({
     type: 'basic',
     iconUrl: 'icon.png',
     title: title || 'Монитор BPM',
@@ -365,39 +366,39 @@ async function refreshTimersOnly() {
 function waitForTabComplete(tabId, timeoutMs = 45000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(onUpdated);
+      ext.tabs.onUpdated.removeListener(onUpdated);
       reject(new Error('Таймаут загрузки вкладки BPM'));
     }, timeoutMs);
 
     function onUpdated(updatedTabId, info) {
       if (updatedTabId === tabId && info.status === 'complete') {
         clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(onUpdated);
+        ext.tabs.onUpdated.removeListener(onUpdated);
         resolve();
       }
     }
 
-    chrome.tabs.get(tabId, (tab) => {
-      if (chrome.runtime.lastError) {
+    ext.tabs.get(tabId, (tab) => {
+      if (ext.runtime.lastError) {
         clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(onUpdated);
-        reject(new Error(chrome.runtime.lastError.message));
+        ext.tabs.onUpdated.removeListener(onUpdated);
+        reject(new Error(ext.runtime.lastError.message));
         return;
       }
       if (tab.status === 'complete') {
         clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(onUpdated);
+        ext.tabs.onUpdated.removeListener(onUpdated);
         resolve();
         return;
       }
-      chrome.tabs.onUpdated.addListener(onUpdated);
+      ext.tabs.onUpdated.addListener(onUpdated);
     });
   });
 }
 
 async function findExistingMonitorTab() {
   // 1) Активная вкладка BPM — приоритет (то, что видит пользователь)
-  const activeTabs = await chrome.tabs.query({
+  const activeTabs = await ext.tabs.query({
     active: true,
     currentWindow: true
   });
@@ -407,18 +408,18 @@ async function findExistingMonitorTab() {
   }
 
   // 2) Дашборд «Работа»
-  const dashboards = await chrome.tabs.query({ url: TARGET_URL_PATTERN });
+  const dashboards = await ext.tabs.query({ url: TARGET_URL_PATTERN });
   if (dashboards.length > 0) {
     const exact = dashboards.find((t) => (t.url || '').includes('RESPONSIVE_WORK'));
     return exact || dashboards[0];
   }
 
   // 3) Сохранённый id
-  const stored = await chrome.storage.local.get([MONITOR_TAB_STORAGE_KEY]);
+  const stored = await ext.storage.local.get([MONITOR_TAB_STORAGE_KEY]);
   const savedId = stored[MONITOR_TAB_STORAGE_KEY];
   if (savedId != null) {
     try {
-      const tab = await chrome.tabs.get(savedId);
+      const tab = await ext.tabs.get(savedId);
       if (tab && tab.url && tab.url.includes('workplace.ertelecom.ru')) {
         return tab;
       }
@@ -427,7 +428,7 @@ async function findExistingMonitorTab() {
     }
   }
 
-  const anyWorkplace = await chrome.tabs.query({
+  const anyWorkplace = await ext.tabs.query({
     url: 'https://workplace.ertelecom.ru/*'
   });
   return anyWorkplace[0] || null;
@@ -437,7 +438,7 @@ async function ensureMonitorTab() {
   let tab = await findExistingMonitorTab();
 
   if (tab) {
-    await chrome.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
+    await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
     monitorStatus = 'tab-ready';
     await saveState();
     return tab;
@@ -446,13 +447,13 @@ async function ensureMonitorTab() {
   monitorStatus = 'opening-tab';
   await saveState();
 
-  tab = await chrome.tabs.create({
+  tab = await ext.tabs.create({
     url: TARGET_URL,
     active: false,
     pinned: true
   });
 
-  await chrome.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
+  await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
   await waitForTabComplete(tab.id);
   await new Promise((r) => setTimeout(r, 5000));
 
@@ -475,7 +476,7 @@ function dedupeTasks(tasks) {
 
 async function scrapeViaScripting(tabId) {
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await ext.scripting.executeScript({
       target: { tabId, allFrames: true },
       func: pageFindTasks
     });
@@ -506,13 +507,13 @@ function collectTasksFromTab(tabId, timeoutMs = 2500) {
       }
     }
 
-    chrome.runtime.onMessage.addListener(onMessage);
-    chrome.tabs.sendMessage(tabId, { action: 'getTasks' }, () => {
-      void chrome.runtime.lastError;
+    ext.runtime.onMessage.addListener(onMessage);
+    ext.tabs.sendMessage(tabId, { action: 'getTasks' }, () => {
+      void ext.runtime.lastError;
     });
 
     setTimeout(() => {
-      chrome.runtime.onMessage.removeListener(onMessage);
+      ext.runtime.onMessage.removeListener(onMessage);
       resolve(collected);
     }, timeoutMs);
   });
@@ -528,14 +529,14 @@ async function requestTasksFromTab(tab) {
   if (tasks.length) return tasks;
 
   // Пробуем остальные вкладки BPM — вдруг активная/сохранённая пустая
-  const candidates = await chrome.tabs.query({
+  const candidates = await ext.tabs.query({
     url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
   });
   for (const candidate of candidates) {
     if (candidate.id === tab.id) continue;
     tasks = await scrapeViaScripting(candidate.id);
     if (tasks.length) {
-      await chrome.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: candidate.id });
+      await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: candidate.id });
       return tasks;
     }
   }
@@ -632,31 +633,31 @@ async function setTaskScheme(taskId, scheme) {
 }
 
 function ensureAlarm() {
-  chrome.alarms.create(ALARM_NAME, {
+  ext.alarms.create(ALARM_NAME, {
     periodInMinutes: CHECK_PERIOD_MINUTES,
     delayInMinutes: 0.1
   });
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
+ext.runtime.onInstalled.addListener(async () => {
   await loadState();
   ensureAlarm();
   runCheck('install');
 });
 
-chrome.runtime.onStartup.addListener(async () => {
+ext.runtime.onStartup.addListener(async () => {
   await loadState();
   ensureAlarm();
   runCheck('startup');
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+ext.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     runCheck('alarm');
   }
 });
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'frameTasks') {
     return false;
   }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Монитор задач BPM (V2 фон)",
-  "version": "2.2.1",
-  "description": "Монитор ПРЗ/ФРЗ/ПКМ: вкладки, таймеры, схемы. Данные только локально.",
+  "version": "2.3.0",
+  "description": "Монитор ПРЗ/ФРЗ/ПКМ: Chrome, Edge, Яндекс. Safari — через конвертер.",
   "permissions": [
     "alarms",
     "notifications",
@@ -31,10 +31,17 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Монитор задач BPM V2"
+    "default_title": "Монитор задач BPM V2",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
   },
   "icons": {
-    "48": "icon.png"
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
   },
   "web_accessible_resources": [
     {

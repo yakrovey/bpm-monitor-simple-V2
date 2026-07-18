@@ -140,14 +140,45 @@
 
   <main>
     <section>
-      <h2>1. Установка</h2>
+      <h2>1. Установка в разных браузерах</h2>
+      <p style="font-size:14px;margin:0 0 10px">Это расширение для <strong>Chrome, Edge и Яндекс.Браузера</strong>. Если вы используете Firefox, то файлы для расширения можно скачать отсюда: <a href="https://github.com/yakrovey/bpm-monitor-simple-V2_mozilla" target="_blank" rel="noopener noreferrer">https://github.com/yakrovey/bpm-monitor-simple-V2_mozilla</a></p>
+
+      <h3>Google Chrome</h3>
       <ol>
         <li>Откройте <code>chrome://extensions</code></li>
         <li>Включите <strong>Режим разработчика</strong></li>
-        <li>Нажмите <strong>Загрузить распакованное расширение</strong> и выберите папку <span class="path">bpm-monitor-simple-V2</span></li>
-        <li>Разрешите уведомления для Chrome, если браузер спросит</li>
+        <li><strong>Загрузить распакованное расширение</strong> → папка <span class="path">bpm-monitor-simple-V2</span></li>
+        <li>Разрешите уведомления, если спросит</li>
       </ol>
-      <p class="note">После правок файлов нажимайте «Обновить» на карточке расширения.</p>
+
+      <h3>Microsoft Edge</h3>
+      <ol>
+        <li>Откройте <code>edge://extensions</code></li>
+        <li>Включите <strong>Режим разработчика</strong></li>
+        <li><strong>Загрузить распакованное</strong> → та же папка</li>
+      </ol>
+
+      <h3>Яндекс.Браузер</h3>
+      <ol>
+        <li>Откройте <code>browser://extensions</code> или Меню → Дополнения → Расширения</li>
+        <li>Включите режим разработчика</li>
+        <li>Загрузите распакованное расширение из папки проекта</li>
+      </ol>
+      <p class="note">Chrome / Edge / Яндекс основаны на Chromium — используется файл <code>manifest.json</code> как есть.</p>
+
+      <h3>Apple Safari (macOS)</h3>
+      <ol>
+        <li>Safari не загружает папку Chrome «как есть» — нужен <strong>Safari Web Extension</strong></li>
+        <li>На Mac с Xcode:
+          <pre style="background:#eef2f7;padding:10px;border-radius:8px;overflow:auto;font-size:12px">xcrun safari-web-extension-converter "/путь/к/bpm-monitor-simple-V2" --app-name "BPM Monitor V2"</pre>
+        </li>
+        <li>Откройте созданный проект в Xcode → Run</li>
+        <li>Safari → Настройки → Расширения → включите «BPM Monitor V2»</li>
+        <li>Разрешите доступ к сайту <code>workplace.ertelecom.ru</code></li>
+      </ol>
+      <p class="note warn">Для распространения вне вашего Mac нужна учётная запись Apple Developer. На Windows/Linux Safari-расширение не ставится.</p>
+
+      <p class="note">После любых правок файлов в Chromium-браузерах нажимайте «Обновить» на карточке расширения.</p>
     </section>
 
     <section>

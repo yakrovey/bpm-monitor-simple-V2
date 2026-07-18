@@ -1,6 +1,8 @@
 // Content script — парсинг задач только на workplace.ertelecom.ru
 // Никуда вовне данные не уходят, только в background этого расширения.
 
+const ext = globalThis.browser ?? globalThis.chrome;
+
 console.log('🚀 BPM Monitor V2 content script');
 
 function parseDate(dateStr) {
@@ -295,22 +297,22 @@ function findTasks() {
 
 function pushTasksToBackground(tasks) {
   if (!tasks.length) return;
-  chrome.runtime.sendMessage({ action: 'newTasks', tasks }, () => {
-    void chrome.runtime.lastError;
+  ext.runtime.sendMessage({ action: 'newTasks', tasks }, () => {
+    void ext.runtime.lastError;
   });
 }
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getTasks' || request.action === 'manualCheck') {
     const tasks = findTasks();
     console.log(`📤 V2: найдено задач в фрейме: ${tasks.length}`, location.href);
 
     // Сообщаем в background отдельно: tabs.sendMessage принимает ответ только от одного фрейма,
     // а грид BPM часто внутри iframe.
-    chrome.runtime.sendMessage(
+    ext.runtime.sendMessage(
       { action: 'frameTasks', tasks, href: location.href },
       () => {
-        void chrome.runtime.lastError;
+        void ext.runtime.lastError;
       }
     );
 
