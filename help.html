@@ -134,8 +134,8 @@
 </head>
 <body>
   <header>
-    <h1>Монитор задач BPM V2</h1>
-    <p>Инструкция: вкладки ПРЗ/ФРЗ/ПКМ, сроки, цвета, уведомления и смена схем.</p>
+    <h1>Монитор задач BPM V2alt</h1>
+    <p>Вариант с отдельными дашбордами 4002 / 4003 / 4004. Таймеры и схемы — как в V2.</p>
   </header>
 
   <main>
@@ -182,10 +182,21 @@
     </section>
 
     <section>
-      <h2>2. Первый запуск</h2>
+      <h2>2. Источники данных (V2alt)</h2>
+      <p style="font-size:14px;margin:0 0 10px">Расширение само держит <strong>три закреплённые фоновые вкладки</strong> и раз в минуту читает каждую:</p>
+      <ul>
+        <li><strong>ПРЗ</strong> — <span class="path">…/SYSRP/4002</span></li>
+        <li><strong>ФРЗ</strong> — <span class="path">…/SYSRP/4003</span></li>
+        <li><strong>ПКМ</strong> — <span class="path">…/SYSRP/4004</span></li>
+      </ul>
+      <p class="note">Не закрывайте эти вкладки без нужды. Достаточно один раз войти в BPM в любой из них — сессия общая. Кнопка «Открыть BPM» поднимает все три дашборда.</p>
+    </section>
+
+    <section>
+      <h2>3. Первый запуск</h2>
       <ol>
-        <li>Откройте дашборд <strong>Работа</strong> и войдите:<br>
-          <span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK</span>
+        <li>Войдите в BPM (любой дашборд workplace.ertelecom.ru). Расширение откроет 4002/4003/4004 само:<br>
+          <span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002</span> и соседние
         </li>
         <li>Вкладку можно свернуть, но <strong>не закрывайте</strong> — BPM сам подставляет задачи, расширение страницу не перезагружает</li>
         <li>Иконка расширения → <strong>Проверить сейчас</strong></li>
@@ -201,7 +212,7 @@
     </section>
 
     <section>
-      <h2>4. Вкладки ПРЗ / ФРЗ / ПКМ</h2>
+      <h2>5. Вкладки ПРЗ / ФРЗ / ПКМ</h2>
       <ul>
         <li>В окне расширения три вкладки: <strong>ПРЗ</strong>, <strong>ФРЗ</strong>, <strong>ПКМ</strong></li>
         <li>В каждой вкладке — только задачи этого шага</li>
@@ -247,7 +258,7 @@
     </section>
 
     <section>
-      <h2>7. Сроки, цвета и уведомления</h2>
+      <h2>8. Сроки, цвета и уведомления</h2>
       <p style="font-size:14px;color:#5f6b76;margin:0 0 8px">Ниже — <strong>рабочие часы</strong> от времени старта со страницы (кроме ВОЛС).</p>
       <p class="note">Когда заявка <strong>становится синей</strong> (просрочка) на любом шаге — ПРЗ, ФРЗ или ПКМ — приходит уведомление <span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span> (один раз, в момент перехода). Уже просроченные на первом снимке не спамят.</p>
 

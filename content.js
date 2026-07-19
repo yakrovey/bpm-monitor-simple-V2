@@ -107,7 +107,6 @@ function parseInstanceName(raw) {
   const text = (raw || '').trim();
   if (!text) return { client: '', address: '' };
 
-  // Подключение "КЛИЕНТ" по ТЭО N
   const conn = text.match(
     /^Подключение\s+[\"«`'“](.+?)[\"»`'”]\s+по\s+ТЭО/i
   );
@@ -115,46 +114,77 @@ function parseInstanceName(raw) {
     return { client: conn[1].trim(), address: '' };
   }
 
-  // Убираем хвост RIAS/KRUS/[id]
   let cleaned = text
     .replace(/\s*\[[\d]+\]\s*$/, '')
     .replace(/\s+(RIAS|KRUS)-[\w.-]+\s*$/i, '')
     .trim();
 
-  const parts = cleaned
-    .split(/\.\s+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
   const orgRe =
-    /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество с ограниченной|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
+    /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество|ОБЩЕСТВО|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
   const addressRe =
-    /(Санкт-Петербург|Ленинград|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|, \d)/i;
+    /(Санкт-Петербург|СПб|Ленинградск|Москва|МО\b|г\.|город\b|ул\.|улица|пр-кт|проспект|\bпр\.|ш\.|шоссе|пер\.|переулок|наб\.|бул\.|б-р|д\.|дом\b|корп\.?|стр\.|лит\.|обл\.|область|район|р-н|пос[её]лок|пгт|микрорайон|мкр\.?)/i;
+
+  const clientQuoted = cleaned.match(
+    /^((?:ООО|ОАО|АО|ПАО|ЗАО|ИП)\s*[«"'“”'].+?[»"'“”']|(?:Общество|ОБЩЕСТВО|Акционерн\w*|Публичн\w*|Государственн\w*)[\s\S]*?[«"'“”'].+?[»"'“”'])/i
+  );
 
   let client = '';
   let address = '';
 
-  for (const part of parts) {
-    if (!client && orgRe.test(part)) client = part;
-    else if (!address && addressRe.test(part)) address = part;
-  }
+  if (clientQuoted) {
+    client = clientQuoted[1].trim();
+    address = cleaned
+      .slice(clientQuoted[0].length)
+      .replace(/^[\s.,;:—–\-]+/, '')
+      .trim();
+  } else {
+    let parts = cleaned
+      .split(/\.\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
 
-  // Если порядок «клиент. адрес» или наоборот не распознали
-  if (!client && !address && parts.length >= 2) {
-    if (addressRe.test(parts[0])) {
-      address = parts[0];
-      client = parts.slice(1).join('. ');
-    } else {
-      client = parts[0];
-      address = parts.slice(1).join('. ');
+    if (parts.length < 2) {
+      const alt = cleaned
+        .split(/\s*[|—–]\s*|\s+\/\s+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (alt.length >= 2) parts = alt;
     }
-  } else if (!client && address && parts.length >= 2) {
-    client = parts.find((p) => p !== address) || '';
-  } else if (client && !address && parts.length >= 2) {
-    address = parts.find((p) => p !== client && addressRe.test(p)) || '';
+
+    if (parts.length >= 2) {
+      const orgIdx = parts.findIndex((p) => orgRe.test(p));
+      if (orgIdx >= 0) {
+        client = parts[orgIdx];
+        const rest = parts.filter((_, i) => i !== orgIdx);
+        const addrPart = rest.find((p) => addressRe.test(p));
+        address = (addrPart || rest.join('. ')).trim();
+      } else if (addressRe.test(parts[0])) {
+        address = parts[0];
+        client = parts.slice(1).join('. ');
+      } else {
+        client = parts[0];
+        address = parts.slice(1).join('. ');
+      }
+    } else {
+      const m = cleaned.match(addressRe);
+      if (m && m.index > 8) {
+        client = cleaned
+          .slice(0, m.index)
+          .replace(/[\s.,;:—–\-]+$/, '')
+          .trim();
+        address = cleaned.slice(m.index).trim();
+      } else {
+        client = cleaned;
+      }
+    }
   }
 
-  if (!client && !address) client = cleaned;
+  if (address && address.toLowerCase() === client.toLowerCase()) {
+    address = '';
+  }
+  if (address && !addressRe.test(address) && address.length < 12) {
+    address = '';
+  }
 
   return {
     client: client.replace(/\.+$/, '').trim(),
@@ -174,6 +204,27 @@ function getRowCells(row) {
   );
 }
 
+function looksLikeDate(s) {
+  const t = (s || '').trim();
+  return (
+    /\d{1,2}\s+[а-яё]{3,}\.?\s+\d{4}/i.test(t) ||
+    /\d{2}\.\d{2}\.\d{4}/.test(t) ||
+    /\d{4}-\d{2}-\d{2}/.test(t)
+  );
+}
+
+function looksLikeOrg(s) {
+  return /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество|ОБЩЕСТВО|Акционерн|АКЦИОНЕРН)/i.test(
+    s || ''
+  );
+}
+
+function looksLikeAddress(s) {
+  return /(Санкт-Петербург|СПб|Ленинградск|Москва|г\.|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|,\s*\d+\s*\/\s*\d)/i.test(
+    s || ''
+  );
+}
+
 function findTasks() {
   const tasks = [];
   const seen = new Set();
@@ -189,33 +240,73 @@ function findTasks() {
 
     const cells = getRowCells(row);
     const cellText = (el) => (el?.innerText || el?.textContent || '').trim();
+    const texts = cells.map(cellText).map((t) => t.trim()).filter(Boolean);
 
     let title = '';
     let instanceName = '';
+    let client = '';
+    let address = '';
     let status = '';
     let priority = '';
     let dateStr = '';
 
-    if (cells.length >= 5) {
+    const href = location.href || '';
+    const dedicated =
+      href.includes('/SYSRP/4002') ||
+      href.includes('/SYSRP/4003') ||
+      href.includes('/SYSRP/4004');
+
+    // Тема | Клиент | Адрес | Услуга | Дата | [id]
+    if (dedicated && texts.length >= 4) {
+      title = texts[0] || '';
+      client = texts.find(looksLikeOrg) || texts[1] || '';
+      address =
+        texts.find((t) => t !== client && looksLikeAddress(t)) ||
+        (texts[2] && texts[2] !== client ? texts[2] : '') ||
+        '';
+      dateStr = texts.find(looksLikeDate) || '';
+      priority =
+        texts.find(
+          (t) =>
+            t !== title &&
+            t !== client &&
+            t !== address &&
+            t !== dateStr &&
+            !/^\d{4,}$/.test(t)
+        ) || '';
+      instanceName = [client, address].filter(Boolean).join('. ');
+    } else if (cells.length >= 5) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
       status = cellText(cells[2]);
       priority = cellText(cells[3]);
       dateStr = cellText(cells[4]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     } else if (cells.length >= 4) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
       status = cellText(cells[2]);
       dateStr = cellText(cells[3]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     } else if (cells.length >= 2) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     }
 
-    // Только ПРЗ / ФРЗ / ПКМ; «Шаг 1.2/3.1/5.1» отбрасываем
     const titleLower = (title || '').toLowerCase();
-    if (/шаг\s*\d/.test(titleLower)) return;
-    if (!/(прз|фрз|пкм)/.test(titleLower)) return;
+    if (!dedicated) {
+      if (/шаг\s*\d/.test(titleLower)) return;
+      if (!/(прз|фрз|пкм)/.test(titleLower)) return;
+    } else if (title.length <= 2) {
+      return;
+    }
 
     if (
       titleLower.includes('отложен') ||
@@ -235,77 +326,60 @@ function findTasks() {
       return;
     }
 
-    const { client, address } = parseInstanceName(instanceName);
     const pageDate = parseDate(dateStr);
     const appearedAt = pageDate ? pageDate.getTime() : null;
 
-    const key = (title + '|' + instanceName).substring(0, 160);
-    if (!seen.has(key) && title.length > 3) {
+    const key = (title + '|' + client + '|' + address).substring(0, 180);
+    if (!seen.has(key) && title.length > 2) {
       seen.add(key);
       tasks.push({
         id: key,
         title,
         client,
         address,
-        instanceName,
+        instanceName: instanceName || [client, address].filter(Boolean).join('. '),
         status,
         priority,
         date: dateStr,
         appearedAt,
-        fullText: [title, instanceName, status, dateStr].join(' ')
+        fullText: [title, client, address, priority, dateStr].join(' ')
       });
     }
   });
 
-  if (tasks.length === 0) {
-    const table = document.querySelector('table');
-    if (table) {
-      table.querySelectorAll('tbody tr').forEach((row) => {
-        const text = row.textContent?.trim() || '';
-        if (
-          text.length > 20 &&
-          (text.includes('Подключение') ||
-            text.includes('расчет') ||
-            text.includes('координация'))
-        ) {
-          if (text.toLowerCase().includes('отложен')) return;
-
-          const dateStr = extractDateFromText(text);
-          // Срок выполнения не используем как фильтр возраста
-
-          const key = text.substring(0, 100);
-          if (!seen.has(key)) {
-            seen.add(key);
-            tasks.push({
-              id: key,
-              title: text.substring(0, 150),
-              client: '',
-              address: '',
-              instanceName: '',
-              status: '',
-              date: dateStr || '',
-              fullText: text
-            });
-          }
-        }
-      });
-    }
-  }
-
   return tasks;
+}
+
+function dashboardFamilyFromHref(href) {
+  const h = href || location.href || '';
+  if (h.includes('/SYSRP/4002')) return 'prz';
+  if (h.includes('/SYSRP/4003')) return 'frz';
+  if (h.includes('/SYSRP/4004')) return 'pkm';
+  return null;
+}
+
+function tagTasks(tasks) {
+  const family = dashboardFamilyFromHref();
+  if (!family) return tasks;
+  return tasks.map((t) => ({
+    ...t,
+    _family: family,
+    _dashboardKey: family,
+    id: t.id || `${family}|${t.title}|${t.instanceName || t.client || ''}`
+  }));
 }
 
 function pushTasksToBackground(tasks) {
   if (!tasks.length) return;
-  ext.runtime.sendMessage({ action: 'newTasks', tasks }, () => {
+  ext.runtime.sendMessage({ action: 'newTasks', tasks: tagTasks(tasks) }, () => {
     void ext.runtime.lastError;
   });
 }
 
 ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getTasks' || request.action === 'manualCheck') {
-    const tasks = findTasks();
-    console.log(`📤 V2: найдено задач в фрейме: ${tasks.length}`, location.href);
+    const tasks = tagTasks(findTasks());
+    console.log(`📤 V2alt: найдено задач в фрейме: ${tasks.length}`, location.href);
 
     // Сообщаем в background отдельно: tabs.sendMessage принимает ответ только от одного фрейма,
     // а грид BPM часто внутри iframe.

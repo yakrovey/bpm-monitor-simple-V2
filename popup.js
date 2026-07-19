@@ -6,8 +6,11 @@ import {
 } from './businessTime.js';
 import { ext } from './extApi.js';
 
-const TARGET_URL =
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK';
+const DASHBOARD_URLS = [
+  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002',
+  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4003',
+  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4004'
+];
 
 const TAB_LABELS = {
   prz: 'ПРЗ',
@@ -382,17 +385,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   openBtn.addEventListener('click', async () => {
-    const tabs = await ext.tabs.query({
-      url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
-    });
-    if (tabs[0]) {
-      await ext.tabs.update(tabs[0].id, { active: true });
-      if (tabs[0].windowId != null) {
-        await ext.windows.update(tabs[0].windowId, { focused: true });
+    let focusTab = null;
+    for (const url of DASHBOARD_URLS) {
+      const all = await ext.tabs.query({
+        url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
+      });
+      const match = url.split('/').pop(); // 4002 / 4003 / 4004
+      let tab = all.find((t) => (t.url || '').includes(`/SYSRP/${match}`));
+      if (!tab) {
+        tab = await ext.tabs.create({ url, active: false, pinned: true });
       }
-      return;
+      if (!focusTab) focusTab = tab;
     }
-    await ext.tabs.create({ url: TARGET_URL, active: true });
+    if (focusTab) {
+      await ext.tabs.update(focusTab.id, { active: true });
+      if (focusTab.windowId != null) {
+        await ext.windows.update(focusTab.windowId, { focused: true });
+      }
+    }
   });
 
   helpBtn.addEventListener('click', () => {

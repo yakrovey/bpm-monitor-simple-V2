@@ -10,16 +10,38 @@ import { isWorkTime, parseRussianDateTime } from './businessTime.js';
 import { pageFindTasks } from './pageScrape.js';
 import { ext } from './extApi.js';
 
-// BPM Monitor V2 — фон + рабочие таймеры
+// BPM Monitor V2alt — фон + рабочие таймеры
+// Источники: отдельные дашборды ПРЗ / ФРЗ / ПКМ (не «Работа»).
 // Данные только локально: ext.storage.local + workplace.ertelecom.ru
 
-const TARGET_URL =
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK';
-const TARGET_URL_PATTERN =
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*';
+const DASHBOARDS = [
+  {
+    key: 'prz',
+    family: 'prz',
+    label: 'ПРЗ',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002',
+    match: '/SYSRP/4002'
+  },
+  {
+    key: 'frz',
+    family: 'frz',
+    label: 'ФРЗ',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4003',
+    match: '/SYSRP/4003'
+  },
+  {
+    key: 'pkm',
+    family: 'pkm',
+    label: 'ПКМ',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4004',
+    match: '/SYSRP/4004'
+  }
+];
+
 const ALARM_NAME = 'bpmCheck';
 const CHECK_PERIOD_MINUTES = 1;
-const MONITOR_TAB_STORAGE_KEY = 'monitorTabId';
+const MONITOR_TABS_STORAGE_KEY = 'monitorTabIds';
+const GRID_SETTLE_MS = 5000;
 
 let knownIds = new Set();
 let activeTasks = [];
@@ -75,7 +97,7 @@ function getTaskType(title) {
     return null;
   }
 
-  // Только явные шаги ПРЗ / ФРЗ / ПКМ. «Шаг 1.2 / 3.1 / 5.1» и прочее — игнор.
+  // На общем дашборде игнор «Шаг 1.2…»; на отдельных досках тип задаёт classifyFromDashboard.
   if (/шаг\s*\d/.test(text)) return null;
   if (!/(прз|фрз|пкм)/.test(text)) return null;
 
@@ -93,6 +115,47 @@ function getTaskType(title) {
       return 'ПРЗ: Валидация';
     }
     return 'ПРЗ: Предварительный расчет';
+  }
+
+  return null;
+}
+
+function isInactiveRaw(raw) {
+  const text = `${raw.title || ''} ${raw.status || ''}`.toLowerCase();
+  return (
+    text.includes('отложен') ||
+    text.includes('завершен') ||
+    text.includes('закрыт') ||
+    text.includes('выполнен') ||
+    text.includes('отказ') ||
+    text.includes('управление отложен')
+  );
+}
+
+/** Тип задачи с учётом дашборда-источника (4002/4003/4004). */
+function classifyFromDashboard(raw) {
+  if (isInactiveRaw(raw)) return null;
+
+  const family = raw._family;
+  const typed = getTaskType(raw.title);
+
+  if (typed) {
+    const typedFamily = getStepFamily(typed);
+    if (!family || typedFamily === family) return typed;
+    return null;
+  }
+
+  const title = (raw.title || '').toLowerCase();
+  if (family === 'prz') {
+    if (title.includes('валидация') || title.includes('validation')) {
+      return 'ПРЗ: Валидация';
+    }
+    return 'ПРЗ: Предварительный расчет';
+  }
+  if (family === 'frz') return 'ФРЗ: Финальный расчет';
+  if (family === 'pkm') {
+    if (title.includes('подключен')) return 'ПКМ: Подключение';
+    return 'ПКМ: Координация';
   }
 
   return null;
@@ -271,7 +334,7 @@ async function processTasks(tasks) {
   let skippedNoType = 0;
 
   for (const raw of tasks) {
-    const type = getTaskType(raw.title);
+    const type = classifyFromDashboard(raw);
     if (!type) {
       skippedNoType += 1;
       continue;
@@ -396,70 +459,73 @@ function waitForTabComplete(tabId, timeoutMs = 45000) {
   });
 }
 
-async function findExistingMonitorTab() {
-  // 1) Активная вкладка BPM — приоритет (то, что видит пользователь)
-  const activeTabs = await ext.tabs.query({
-    active: true,
-    currentWindow: true
-  });
-  const active = activeTabs[0];
-  if (active?.url && active.url.includes('workplace.ertelecom.ru')) {
-    return active;
-  }
+async function getStoredTabIds() {
+  const stored = await ext.storage.local.get([MONITOR_TABS_STORAGE_KEY]);
+  return stored[MONITOR_TABS_STORAGE_KEY] || {};
+}
 
-  // 2) Дашборд «Работа»
-  const dashboards = await ext.tabs.query({ url: TARGET_URL_PATTERN });
-  if (dashboards.length > 0) {
-    const exact = dashboards.find((t) => (t.url || '').includes('RESPONSIVE_WORK'));
-    return exact || dashboards[0];
-  }
+async function saveStoredTabIds(map) {
+  await ext.storage.local.set({ [MONITOR_TABS_STORAGE_KEY]: map });
+}
 
-  // 3) Сохранённый id
-  const stored = await ext.storage.local.get([MONITOR_TAB_STORAGE_KEY]);
-  const savedId = stored[MONITOR_TAB_STORAGE_KEY];
+function tabMatchesDashboard(tab, dash) {
+  const url = tab?.url || '';
+  return url.includes(dash.match);
+}
+
+async function findTabForDashboard(dash, storedIds) {
+  const savedId = storedIds[dash.key];
   if (savedId != null) {
     try {
       const tab = await ext.tabs.get(savedId);
-      if (tab && tab.url && tab.url.includes('workplace.ertelecom.ru')) {
-        return tab;
-      }
+      if (tab && tabMatchesDashboard(tab, dash)) return tab;
     } catch (_) {
-      // вкладка закрыта
+      /* закрыта */
     }
   }
 
-  const anyWorkplace = await ext.tabs.query({
-    url: 'https://workplace.ertelecom.ru/*'
+  const all = await ext.tabs.query({
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
   });
-  return anyWorkplace[0] || null;
+  const exact = all.find((t) => tabMatchesDashboard(t, dash));
+  if (exact) return exact;
+  return null;
 }
 
-async function ensureMonitorTab() {
-  let tab = await findExistingMonitorTab();
-
+async function ensureDashboardTab(dash, storedIds) {
+  let tab = await findTabForDashboard(dash, storedIds);
   if (tab) {
-    await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
-    monitorStatus = 'tab-ready';
-    await saveState();
+    storedIds[dash.key] = tab.id;
     return tab;
   }
 
-  monitorStatus = 'opening-tab';
-  await saveState();
-
   tab = await ext.tabs.create({
-    url: TARGET_URL,
+    url: dash.url,
     active: false,
     pinned: true
   });
-
-  await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: tab.id });
+  storedIds[dash.key] = tab.id;
   await waitForTabComplete(tab.id);
-  await new Promise((r) => setTimeout(r, 5000));
+  await new Promise((r) => setTimeout(r, GRID_SETTLE_MS));
+  return tab;
+}
+
+/** Держит три закреплённые фоновые вкладки 4002/4003/4004. */
+async function ensureAllDashboardTabs() {
+  monitorStatus = 'opening-tab';
+  await saveState();
+
+  const storedIds = await getStoredTabIds();
+  const pairs = [];
+  for (const dash of DASHBOARDS) {
+    const tab = await ensureDashboardTab(dash, storedIds);
+    pairs.push({ dash, tab });
+  }
+  await saveStoredTabIds(storedIds);
 
   monitorStatus = 'tab-ready';
   await saveState();
-  return tab;
+  return pairs;
 }
 
 function dedupeTasks(tasks) {
@@ -478,7 +544,8 @@ async function scrapeViaScripting(tabId) {
   try {
     const results = await ext.scripting.executeScript({
       target: { tabId, allFrames: true },
-      func: pageFindTasks
+      func: pageFindTasks,
+      args: [{ requireStepKeywords: false }]
     });
     const merged = [];
     for (const item of results || []) {
@@ -519,52 +586,56 @@ function collectTasksFromTab(tabId, timeoutMs = 2500) {
   });
 }
 
-async function requestTasksFromTab(tab) {
-  // Страницу не перезагружаем. Сначала прямой scrape (работает даже если
-  // content script ещё не успел внедриться после обновления расширения).
+async function scrapeOneDashboard(dash, tab) {
   let tasks = await scrapeViaScripting(tab.id);
-  if (tasks.length) return tasks;
+  if (!tasks.length) {
+    tasks = await collectTasksFromTab(tab.id, 2500);
+  }
+  return tasks.map((t) => ({
+    ...t,
+    _family: dash.family,
+    _dashboardKey: dash.key,
+    id: t.id || `${dash.key}|${t.title}|${t.instanceName || t.client || ''}`
+  }));
+}
 
-  tasks = await collectTasksFromTab(tab.id, 2500);
-  if (tasks.length) return tasks;
+async function requestTasksFromAllDashboards() {
+  const pairs = await ensureAllDashboardTabs();
+  const merged = [];
+  const perDash = [];
 
-  // Пробуем остальные вкладки BPM — вдруг активная/сохранённая пустая
-  const candidates = await ext.tabs.query({
-    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
-  });
-  for (const candidate of candidates) {
-    if (candidate.id === tab.id) continue;
-    tasks = await scrapeViaScripting(candidate.id);
-    if (tasks.length) {
-      await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: candidate.id });
-      return tasks;
-    }
+  for (const { dash, tab } of pairs) {
+    const tasks = await scrapeOneDashboard(dash, tab);
+    perDash.push({ key: dash.key, label: dash.label, count: tasks.length });
+    merged.push(...tasks);
   }
 
-  return [];
+  return { tasks: dedupeTasks(merged), perDash, tabCount: pairs.length };
 }
 
 async function runCheck(reason = 'alarm') {
-  console.log(`🔍 Проверка (${reason})`);
+  console.log(`🔍 Проверка V2alt (${reason})`);
   try {
     await loadState();
     if (activeTasks.length) {
       await refreshTimersOnly();
     }
-    const tab = await ensureMonitorTab();
-    const tasks = await requestTasksFromTab(tab);
+    const { tasks, perDash, tabCount } = await requestTasksFromAllDashboards();
+    const summary = perDash.map((p) => `${p.label}:${p.count}`).join(' · ');
 
     if (tasks.length) {
       const result = await processTasks(tasks);
-      return { ok: true, ...result };
+      lastCheckMessage = `${result.message || ''} [${summary}] · вкладок: ${tabCount}`;
+      await saveState();
+      return { ok: true, ...result, message: lastCheckMessage, perDash };
     }
 
     monitorStatus = 'monitoring';
     lastCheckAt = Date.now();
     lastCheckMessage =
       activeTasks.length > 0
-        ? `Со страницы 0 строк, оставлен прошлый список (${activeTasks.length}). Кликните по вкладке «Работа» и повторите.`
-        : 'На странице задачи не найдены. Откройте дашборд «Работа» (с таблицей задач) и нажмите «Проверить сейчас» ещё раз.';
+        ? `С дашбордов 0 строк (${summary}), оставлен прошлый список (${activeTasks.length}). Проверьте вкладки 4002/4003/4004.`
+        : `Задачи не найдены (${summary}). Нужны дашборды ПРЗ/ФРЗ/ПКМ (расширение открывает их в фоне). Войдите в BPM и нажмите «Проверить сейчас».`;
     if (!activeTasks.length) {
       lastError = lastCheckMessage;
     } else {
@@ -577,7 +648,8 @@ async function runCheck(reason = 'alarm') {
       total: activeTasks.length,
       scraped: 0,
       emptyScrape: true,
-      message: lastCheckMessage
+      message: lastCheckMessage,
+      perDash
     };
   } catch (err) {
     lastError = String(err && err.message ? err.message : err);
@@ -681,7 +753,8 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
         activeCount: activeTasks.length,
         knownCount: knownIds.size,
         bootstrapped,
-        targetUrl: TARGET_URL,
+        targetUrl: DASHBOARDS.map((d) => d.url),
+        dashboards: DASHBOARDS.map((d) => ({ key: d.key, label: d.label, url: d.url })),
         privacy: 'local-only',
         workHours: 'пн–пт 09:00–18:00',
         notificationsEnabled: isWorkTime(),
@@ -735,5 +808,5 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 loadState().then(() => {
   ensureAlarm();
-  console.log('✅ Background V2 + timers готов (local-only)');
+  console.log('✅ Background V2alt (3 dashboards) готов (local-only)');
 });

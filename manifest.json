@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Монитор задач BPM (V2 фон)",
-  "version": "2.3.1",
-  "description": "Монитор ПРЗ/ФРЗ/ПКМ: Chrome, Edge, Яндекс. Safari — через конвертер.",
+  "name": "Монитор задач BPM (V2alt · 3 дашборда)",
+  "version": "2.4.2",
+  "description": "ПРЗ/ФРЗ/ПКМ с отдельных дашбордов 4002/4003/4004. Данные только локально.",
   "permissions": [
     "alarms",
     "notifications",
@@ -31,7 +31,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Монитор задач BPM V2",
+    "default_title": "Монитор BPM V2alt",
     "default_icon": {
       "16": "icon.png",
       "48": "icon.png",

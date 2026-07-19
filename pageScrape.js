@@ -1,9 +1,11 @@
 /**
  * Инжектируемая функция (без внешних зависимостей).
  * Вызывается через chrome.scripting.executeScript.
- * Только темы ПРЗ / ФРЗ / ПКМ; время старта — из колонки срока на странице.
+ * opts.requireStepKeywords=false — режим отдельных дашбордов 4002/4003/4004
+ * (берём активные строки таблицы, тип задаёт background по URL дашборда).
  */
-export function pageFindTasks() {
+export function pageFindTasks(opts) {
+  const requireStepKeywords = !(opts && opts.requireStepKeywords === false);
   function parseInstanceName(raw) {
     const text = (raw || '').trim();
     if (!text) return { client: '', address: '' };
@@ -20,39 +22,74 @@ export function pageFindTasks() {
       .replace(/\s+(RIAS|KRUS)-[\w.-]+\s*$/i, '')
       .trim();
 
-    const parts = cleaned
-      .split(/\.\s+/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-
     const orgRe =
-      /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество с ограниченной|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
+      /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество|ОБЩЕСТВО|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
     const addressRe =
-      /(Санкт-Петербург|Ленинград|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|, \d)/i;
+      /(Санкт-Петербург|СПб|Ленинградск|Москва|МО\b|г\.|город\b|ул\.|улица|пр-кт|проспект|\bпр\.|ш\.|шоссе|пер\.|переулок|наб\.|бул\.|б-р|д\.|дом\b|корп\.?|стр\.|лит\.|обл\.|область|район|р-н|пос[её]лок|пгт|микрорайон|мкр\.?)/i;
+
+    // Юрлицо в кавычках → всё после кавычек считаем адресом
+    const clientQuoted = cleaned.match(
+      /^((?:ООО|ОАО|АО|ПАО|ЗАО|ИП)\s*[«"'“”'].+?[»"'“”']|(?:Общество|ОБЩЕСТВО|Акционерн\w*|Публичн\w*|Государственн\w*)[\s\S]*?[«"'“”'].+?[»"'“”'])/i
+    );
 
     let client = '';
     let address = '';
 
-    for (const part of parts) {
-      if (!client && orgRe.test(part)) client = part;
-      else if (!address && addressRe.test(part)) address = part;
-    }
+    if (clientQuoted) {
+      client = clientQuoted[1].trim();
+      address = cleaned
+        .slice(clientQuoted[0].length)
+        .replace(/^[\s.,;:—–\-]+/, '')
+        .trim();
+    } else {
+      let parts = cleaned
+        .split(/\.\s+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
 
-    if (!client && !address && parts.length >= 2) {
-      if (addressRe.test(parts[0])) {
-        address = parts[0];
-        client = parts.slice(1).join('. ');
-      } else {
-        client = parts[0];
-        address = parts.slice(1).join('. ');
+      if (parts.length < 2) {
+        const alt = cleaned
+          .split(/\s*[|—–]\s*|\s+\/\s+/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        if (alt.length >= 2) parts = alt;
       }
-    } else if (!client && address && parts.length >= 2) {
-      client = parts.find((p) => p !== address) || '';
-    } else if (client && !address && parts.length >= 2) {
-      address = parts.find((p) => p !== client && addressRe.test(p)) || '';
+
+      if (parts.length >= 2) {
+        const orgIdx = parts.findIndex((p) => orgRe.test(p));
+        if (orgIdx >= 0) {
+          client = parts[orgIdx];
+          const rest = parts.filter((_, i) => i !== orgIdx);
+          const addrPart = rest.find((p) => addressRe.test(p));
+          address = (addrPart || rest.join('. ')).trim();
+        } else if (addressRe.test(parts[0])) {
+          address = parts[0];
+          client = parts.slice(1).join('. ');
+        } else {
+          client = parts[0];
+          address = parts.slice(1).join('. ');
+        }
+      } else {
+        const m = cleaned.match(addressRe);
+        if (m && m.index > 8) {
+          client = cleaned
+            .slice(0, m.index)
+            .replace(/[\s.,;:—–\-]+$/, '')
+            .trim();
+          address = cleaned.slice(m.index).trim();
+        } else {
+          client = cleaned;
+        }
+      }
     }
 
-    if (!client && !address) client = cleaned;
+    if (address && address.toLowerCase() === client.toLowerCase()) {
+      address = '';
+    }
+    // Если «адрес» на самом деле кусок названия без адресных признаков — не показываем
+    if (address && !addressRe.test(address) && address.length < 12) {
+      address = '';
+    }
 
     return {
       client: client.replace(/\.+$/, '').trim(),
@@ -143,9 +180,33 @@ export function pageFindTasks() {
   }
 
   function isTargetTitle(title) {
+    if (!requireStepKeywords) {
+      return Boolean((title || '').trim().length > 2);
+    }
     const t = (title || '').toLowerCase();
     if (/шаг\s*\d/.test(t)) return false;
     return /(прз|фрз|пкм)/.test(t);
+  }
+
+  function looksLikeDate(s) {
+    const t = (s || '').trim();
+    return (
+      /\d{1,2}\s+[а-яё]{3,}\.?\s+\d{4}/i.test(t) ||
+      /\d{2}\.\d{2}\.\d{4}/.test(t) ||
+      /\d{4}-\d{2}-\d{2}/.test(t)
+    );
+  }
+
+  function looksLikeOrg(s) {
+    return /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество|ОБЩЕСТВО|Акционерн|АКЦИОНЕРН)/i.test(
+      s || ''
+    );
+  }
+
+  function looksLikeAddress(s) {
+    return /(Санкт-Петербург|СПб|Ленинградск|Москва|г\.|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|,\s*\d+\s*\/\s*\d)/i.test(
+      s || ''
+    );
   }
 
   const tasks = [];
@@ -160,26 +221,65 @@ export function pageFindTasks() {
     }
 
     const cells = getRowCells(row);
+    const texts = cells.map(cellText).map((t) => t.trim()).filter(Boolean);
+
     let title = '';
     let instanceName = '';
+    let client = '';
+    let address = '';
     let status = '';
     let priority = '';
     let dateStr = '';
 
-    if (cells.length >= 5) {
+    // Отдельные дашборды 4002/4003/4004:
+    // Тема | Клиент | Адрес | Услуга | Дата | [id]
+    if (!requireStepKeywords && texts.length >= 4) {
+      title = texts[0] || '';
+      client = texts.find(looksLikeOrg) || texts[1] || '';
+      address =
+        texts.find((t) => t !== client && looksLikeAddress(t)) ||
+        (texts[2] && texts[2] !== client ? texts[2] : '') ||
+        '';
+      dateStr = texts.find(looksLikeDate) || '';
+      priority =
+        texts.find(
+          (t) =>
+            t !== title &&
+            t !== client &&
+            t !== address &&
+            t !== dateStr &&
+            !/^\d{4,}$/.test(t)
+        ) || '';
+      instanceName = [client, address].filter(Boolean).join('. ');
+      if (!client && !address) {
+        const parsed = parseInstanceName(texts[1] || '');
+        client = parsed.client;
+        address = parsed.address;
+        instanceName = texts[1] || '';
+      }
+    } else if (cells.length >= 5) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
       status = cellText(cells[2]);
       priority = cellText(cells[3]);
       dateStr = cellText(cells[4]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     } else if (cells.length >= 4) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
       status = cellText(cells[2]);
       dateStr = cellText(cells[3]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     } else if (cells.length >= 2) {
       title = cellText(cells[0]);
       instanceName = cellText(cells[1]);
+      const parsed = parseInstanceName(instanceName);
+      client = parsed.client;
+      address = parsed.address;
     }
 
     if (!isTargetTitle(title)) return;
@@ -204,21 +304,20 @@ export function pageFindTasks() {
     }
 
     const appearedAt = parsePageDate(dateStr);
-    const { client, address } = parseInstanceName(instanceName);
-    const key = (title + '|' + instanceName).substring(0, 160);
-    if (!seen.has(key) && title.length > 3) {
+    const key = (title + '|' + client + '|' + address).substring(0, 180);
+    if (!seen.has(key) && title.length > 2) {
       seen.add(key);
       tasks.push({
         id: key,
         title,
         client,
         address,
-        instanceName,
+        instanceName: instanceName || [client, address].filter(Boolean).join('. '),
         status,
         priority,
         date: dateStr,
         appearedAt,
-        fullText: [title, instanceName, status, dateStr].join(' ')
+        fullText: [title, client, address, priority, dateStr].join(' ')
       });
     }
   });
