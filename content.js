@@ -230,11 +230,21 @@ function findTasks() {
   const seen = new Set();
 
   const rows = document.querySelectorAll(
-    '.taskGridRow, .ng-scope.taskGridRow, [class*="taskGridRow"]'
+    [
+      '.taskGridRow',
+      '.ng-scope.taskGridRow',
+      '[class*="taskGridRow"]',
+      '.ui-grid-row',
+      '[class*="ui-grid-row"]'
+    ].join(', ')
   );
 
   rows.forEach((row) => {
-    if (row.classList.contains('header') || row.classList.contains('heading')) {
+    if (
+      row.classList.contains('header') ||
+      row.classList.contains('heading') ||
+      /header|heading/i.test(row.className || '')
+    ) {
       return;
     }
 
@@ -250,14 +260,10 @@ function findTasks() {
     let priority = '';
     let dateStr = '';
 
-    const href = location.href || '';
-    const dedicated =
-      href.includes('/SYSRP/4002') ||
-      href.includes('/SYSRP/4003') ||
-      href.includes('/SYSRP/4004');
+    const dedicated = isDedicatedDashboard();
 
     // Тема | Клиент | Адрес | Услуга | Дата | [id]
-    if (dedicated && texts.length >= 4) {
+    if (dedicated && texts.length >= 2) {
       title = texts[0] || '';
       client = texts.find(looksLikeOrg) || texts[1] || '';
       address =
@@ -351,11 +357,22 @@ function findTasks() {
 }
 
 function dashboardFamilyFromHref(href) {
-  const h = href || location.href || '';
-  if (h.includes('/SYSRP/4002')) return 'prz';
-  if (h.includes('/SYSRP/4003')) return 'frz';
-  if (h.includes('/SYSRP/4004')) return 'pkm';
+  const candidates = [href || '', location.href || ''];
+  try {
+    candidates.push(window.top?.location?.href || '');
+  } catch (_) {
+    /* cross-origin iframe */
+  }
+  for (const h of candidates) {
+    if (/\/SYSRP\/4002\b/i.test(h)) return 'prz';
+    if (/\/SYSRP\/4003\b/i.test(h)) return 'frz';
+    if (/\/SYSRP\/4004\b/i.test(h)) return 'pkm';
+  }
   return null;
+}
+
+function isDedicatedDashboard() {
+  return dashboardFamilyFromHref() != null;
 }
 
 function tagTasks(tasks) {

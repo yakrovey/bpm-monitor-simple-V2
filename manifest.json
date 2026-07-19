@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Монитор задач BPM (V2alt · 3 дашборда)",
-  "version": "2.4.2",
+  "version": "2.5.7",
   "description": "ПРЗ/ФРЗ/ПКМ с отдельных дашбордов 4002/4003/4004. Данные только локально.",
   "permissions": [
     "alarms",

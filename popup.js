@@ -6,11 +6,33 @@ import {
 } from './businessTime.js';
 import { ext } from './extApi.js';
 
-const DASHBOARD_URLS = [
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002',
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4003',
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4004'
+const DASHBOARDS = [
+  {
+    key: 'prz',
+    label: 'ПРЗ',
+    id: '4002',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002'
+  },
+  {
+    key: 'frz',
+    label: 'ФРЗ',
+    id: '4003',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4003'
+  },
+  {
+    key: 'pkm',
+    label: 'ПКМ',
+    id: '4004',
+    url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4004'
+  }
 ];
+
+const DASHBOARD_ID_RE = /\/SYSRP\/(400[234])(?:\/|$|\?|#)/i;
+
+function extractDashboardId(url) {
+  const m = String(url || '').match(DASHBOARD_ID_RE);
+  return m ? m[1] : null;
+}
 
 const TAB_LABELS = {
   prz: 'ПРЗ',
@@ -132,8 +154,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const listTitle = document.getElementById('listTitle');
   const tabHint = document.getElementById('tabHint');
   const checkBtn = document.getElementById('checkBtn');
-  const openBtn = document.getElementById('openBtn');
   const helpBtn = document.getElementById('helpBtn');
+  const notifyBtn = document.getElementById('notifyBtn');
+  const notifyDot = document.getElementById('notifyDot');
   const schemeModal = document.getElementById('schemeModal');
   const schemeTaskTitle = document.getElementById('schemeTaskTitle');
   const schemeCancel = document.getElementById('schemeCancel');
@@ -143,6 +166,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentHistory = [];
   let activeTab = 'prz';
   let schemeTaskId = null;
+  let notificationsEnabled = true;
+
+  function syncNotifyUi(enabled) {
+    notificationsEnabled = enabled !== false;
+    if (notifyBtn) {
+      notifyBtn.textContent = notificationsEnabled
+        ? 'не показывать уведомления'
+        : 'показывать уведомления';
+    }
+    if (notifyDot) {
+      notifyDot.classList.toggle('on', notificationsEnabled);
+      notifyDot.classList.toggle('off', !notificationsEnabled);
+      notifyDot.title = notificationsEnabled
+        ? 'Уведомления включены'
+        : 'Уведомления выключены';
+    }
+  }
 
   function showCheckResult(text, isError = false) {
     if (!text) {
@@ -262,6 +302,21 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTabButtons(buildStats(currentHistory));
   }
 
+  function syncPrimaryButton(response) {
+    const mode = response?.runMode || 'idle';
+    checkBtn.disabled = false;
+    checkBtn.dataset.mode = mode;
+    if (mode === 'idle') {
+      checkBtn.textContent = 'Запустить';
+    } else if (mode === 'warming') {
+      const left = Math.max(0, Math.ceil(((response.warmUntil || 0) - Date.now()) / 1000));
+      checkBtn.textContent = left > 0 ? `Ожидание… ${left}с` : 'Проверить сейчас';
+      checkBtn.disabled = left > 0;
+    } else {
+      checkBtn.textContent = 'Проверить сейчас';
+    }
+  }
+
   function loadStatus() {
     ext.runtime.sendMessage({ action: 'getStatus' }, (response) => {
       if (ext.runtime.lastError || !response) {
@@ -270,19 +325,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const st = statusLabel(response.monitorStatus);
+      const mode = response.runMode || 'idle';
+      const modeMap = {
+        idle: { text: '● Ожидание запуска', color: '#9e9e9e' },
+        warming: { text: '● Прогрев вкладок', color: '#ff9800' },
+        running: { text: '● Мониторинг', color: '#4caf50' },
+        paused: { text: '● Пауза (нет входа?)', color: '#f44336' }
+      };
+      const st = modeMap[mode] || statusLabel(response.monitorStatus);
       statusEl.textContent = st.text;
       statusEl.style.background = st.color;
+      syncPrimaryButton(response);
+      syncNotifyUi(response.notificationsEnabled !== false);
 
       metaEl.innerHTML = `
+        <div><strong>Режим:</strong> ${escapeHtml(mode)}</div>
         <div><strong>Последняя проверка:</strong> ${escapeHtml(formatTime(response.lastCheckAt))}</div>
         <div><strong>Активных:</strong> ${escapeHtml(response.activeCount)} · <strong>известно:</strong> ${escapeHtml(response.knownCount)}</div>
-        <div><strong>Сбор статуса:</strong> всегда · <strong>Уведомления:</strong> ${
-          response.notificationsEnabled
-            ? 'сейчас включены'
-            : 'на паузе (вне раб. времени)'
+        <div><strong>Рабочие часы (сроки):</strong> ${escapeHtml(response.workHours || 'пн–пт 09:00–18:00')}</div>
+        <div><strong>Всплывающие уведомления:</strong> ${
+          response.notificationsEnabled !== false ? 'вкл' : 'выкл'
         }</div>
-        <div><strong>Рабочие часы:</strong> ${escapeHtml(response.workHours || 'пн–пт 09:00–18:00')}</div>
         ${
           response.lastCheckMessage
             ? `<div><strong>Результат:</strong> ${escapeHtml(response.lastCheckMessage)}</div>`
@@ -349,60 +412,174 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   });
 
-  checkBtn.addEventListener('click', () => {
-    const original = checkBtn.textContent;
-    checkBtn.textContent = 'Проверка...';
-    checkBtn.disabled = true;
-    showCheckResult('Идёт проверка страницы BPM, подождите…');
+  async function openThreeDashboardsFromPopup() {
+    const opened = [];
+    const usedIds = new Set();
 
+    for (const dash of DASHBOARDS) {
+      const existing = await ext.tabs.query({
+        url: 'https://workplace.ertelecom.ru/*'
+      });
+      let tab = existing.find((t) => {
+        if (usedIds.has(t.id)) return false;
+        const href = `${t.url || ''} ${t.pendingUrl || ''}`;
+        return extractDashboardId(href) === dash.id;
+      });
+
+      if (tab) {
+        // Всегда выставляем точный URL дашборда (4002 / 4003 / 4004)
+        tab = await ext.tabs.update(tab.id, {
+          url: dash.url,
+          active: false,
+          pinned: true
+        });
+      } else {
+        tab = await ext.tabs.create({
+          url: dash.url,
+          active: false,
+          pinned: true
+        });
+      }
+
+      if (!tab?.id) {
+        throw new Error(`Не удалось открыть ${dash.label} (${dash.id})`);
+      }
+
+      usedIds.add(tab.id);
+      opened.push({
+        key: dash.key,
+        label: dash.label,
+        url: dash.url,
+        tabId: tab.id
+      });
+    }
+
+    // НЕ активируем вкладку здесь — иначе popup закроется до startMonitor
+    return opened;
+  }
+
+  function sendStartMonitor(opened) {
+    return new Promise((resolve) => {
+      ext.runtime.sendMessage(
+        { action: 'startMonitor', tabsOpenedByPopup: true, opened },
+        (response) => {
+          resolve({
+            err: ext.runtime.lastError,
+            response
+          });
+        }
+      );
+    });
+  }
+
+  if (notifyBtn) {
+    notifyBtn.addEventListener('click', () => {
+      const next = !notificationsEnabled;
+      notifyBtn.disabled = true;
+      ext.runtime.sendMessage(
+        { action: 'setNotificationsEnabled', enabled: next },
+        (response) => {
+          notifyBtn.disabled = false;
+          if (ext.runtime.lastError) {
+            showCheckResult(
+              `Не удалось сменить уведомления: ${ext.runtime.lastError.message}`,
+              true
+            );
+            return;
+          }
+          syncNotifyUi(
+            typeof response?.notificationsEnabled === 'boolean'
+              ? response.notificationsEnabled
+              : next
+          );
+          showCheckResult(
+            response?.message ||
+              (next ? 'Уведомления включены' : 'Уведомления выключены')
+          );
+        }
+      );
+    });
+  }
+
+  checkBtn.addEventListener('click', () => {
+    checkBtn.disabled = true;
+    const mode = checkBtn.dataset.mode || 'idle';
+    const isStart = mode === 'idle';
+
+    if (isStart) {
+      checkBtn.textContent = 'Запуск…';
+      showCheckResult('Открываю 3 вкладки: ПРЗ(4002), ФРЗ(4003), ПКМ(4004)…');
+      (async () => {
+        try {
+          const opened = await openThreeDashboardsFromPopup();
+          const labels = opened.map((o) => `${o.label}:${o.url.split('/').pop()}`).join(', ');
+          showCheckResult(`Вкладки: ${labels}. Включаю прогрев…`);
+
+          // Сначала фон (пока popup ещё жив), потом фокус на вкладку
+          const { err, response } = await sendStartMonitor(opened);
+
+          if (opened[0]?.tabId != null) {
+            try {
+              await ext.tabs.update(opened[0].tabId, { active: true });
+            } catch (_) {
+              /* ignore */
+            }
+          }
+
+          loadStatus();
+          loadHistory();
+
+          if (err) {
+            showCheckResult(
+              `Вкладки открыты (${opened.length}), но фон не ответил: ${err.message}`,
+              true
+            );
+            checkBtn.disabled = false;
+            checkBtn.textContent = 'Запустить';
+            checkBtn.dataset.mode = 'idle';
+            return;
+          }
+          if (!response || response.ok === false) {
+            showCheckResult(
+              response?.message || response?.error || 'Фон не принял запуск',
+              true
+            );
+            checkBtn.disabled = false;
+            checkBtn.textContent = 'Запустить';
+            checkBtn.dataset.mode = 'idle';
+            return;
+          }
+          showCheckResult(
+            response.message ||
+              `Открыто: ${opened.length}. Ждите 1 минуту до первой проверки.`
+          );
+        } catch (e) {
+          showCheckResult(`Не удалось открыть вкладки: ${e.message || e}`, true);
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Запустить';
+          checkBtn.dataset.mode = 'idle';
+        }
+      })();
+      return;
+    }
+
+    checkBtn.textContent = 'Проверка...';
+    showCheckResult('Проверяю вкладки 4002/4003/4004, затем снимаю данные…');
     ext.runtime.sendMessage({ action: 'manualCheck' }, (response) => {
       const err = ext.runtime.lastError;
       loadStatus();
       loadHistory();
       checkBtn.disabled = false;
-
       if (err) {
-        checkBtn.textContent = 'Ошибка';
-        showCheckResult(err.message, true);
-      } else if (!response || response.ok === false) {
-        checkBtn.textContent = 'Ошибка';
-        showCheckResult(
-          response?.message || response?.error || 'Проверка не удалась',
-          true
-        );
-      } else {
-        checkBtn.textContent = 'Готово';
-        showCheckResult(
-          response.message ||
-            `Найдено активных: ${response.total ?? 0}, новых: ${response.newCount ?? 0}`
-        );
+        showCheckResult(`Ошибка: ${err.message}`, true);
+        return;
       }
-
-      setTimeout(() => {
-        checkBtn.textContent = original;
-      }, 2000);
+      showCheckResult(
+        response?.message ||
+          `Найдено активных: ${response?.total ?? 0}, новых: ${response?.newCount ?? 0}`,
+        response?.ok === false || response?.needLogin
+      );
     });
-  });
-
-  openBtn.addEventListener('click', async () => {
-    let focusTab = null;
-    for (const url of DASHBOARD_URLS) {
-      const all = await ext.tabs.query({
-        url: 'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*'
-      });
-      const match = url.split('/').pop(); // 4002 / 4003 / 4004
-      let tab = all.find((t) => (t.url || '').includes(`/SYSRP/${match}`));
-      if (!tab) {
-        tab = await ext.tabs.create({ url, active: false, pinned: true });
-      }
-      if (!focusTab) focusTab = tab;
-    }
-    if (focusTab) {
-      await ext.tabs.update(focusTab.id, { active: true });
-      if (focusTab.windowId != null) {
-        await ext.windows.update(focusTab.windowId, { focused: true });
-      }
-    }
   });
 
   helpBtn.addEventListener('click', () => {

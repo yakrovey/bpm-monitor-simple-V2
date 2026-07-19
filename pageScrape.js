@@ -212,11 +212,22 @@ export function pageFindTasks(opts) {
   const tasks = [];
   const seen = new Set();
   const rows = document.querySelectorAll(
-    '.taskGridRow, .ng-scope.taskGridRow, [class*="taskGridRow"]'
+    [
+      '.taskGridRow',
+      '.ng-scope.taskGridRow',
+      '[class*="taskGridRow"]',
+      '.ui-grid-row',
+      '[class*="ui-grid-row"]'
+    ].join(', ')
   );
 
   rows.forEach((row) => {
-    if (row.classList.contains('header') || row.classList.contains('heading')) {
+    if (
+      row.classList.contains('header') ||
+      row.classList.contains('heading') ||
+      row.classList.contains('ui-grid-header') ||
+      /header|heading/i.test(row.className || '')
+    ) {
       return;
     }
 
@@ -233,7 +244,8 @@ export function pageFindTasks(opts) {
 
     // Отдельные дашборды 4002/4003/4004:
     // Тема | Клиент | Адрес | Услуга | Дата | [id]
-    if (!requireStepKeywords && texts.length >= 4) {
+    // На ФРЗ иногда меньше видимых ячеек — берём от 2 текстов.
+    if (!requireStepKeywords && texts.length >= 2) {
       title = texts[0] || '';
       client = texts.find(looksLikeOrg) || texts[1] || '';
       address =

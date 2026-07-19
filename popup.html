@@ -60,6 +60,25 @@
       background: #eceff1;
       color: #37474f;
     }
+    .notify-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .notify-row .btn {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .notify-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+    }
+    .notify-dot.on { background: #2e7d32; }
+    .notify-dot.off { background: #c62828; }
     .tabs {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
@@ -271,15 +290,18 @@
   </div>
 
   <div class="privacy">
-    Сбор статуса — всегда. Уведомления — только пн–пт 09:00–18:00. Таймер считает только рабочее время.
+    При старте браузера расширение ничего не делает. Сначала нажмите «Запустить» — откроются 3 вкладки дашбордов.
   </div>
 
   <div class="meta" id="meta">Статус: —</div>
   <div class="check-result" id="checkResult" hidden></div>
   <div class="error" id="error" hidden></div>
 
-  <button class="btn" id="checkBtn">Проверить сейчас</button>
-  <button class="btn secondary" id="openBtn">Открыть / показать вкладку BPM</button>
+  <button class="btn" id="checkBtn" data-mode="idle">Запустить</button>
+  <div class="notify-row">
+    <button type="button" class="btn secondary" id="notifyBtn">не показывать уведомления</button>
+    <span class="notify-dot on" id="notifyDot" title="Уведомления включены"></span>
+  </div>
   <button class="btn secondary" id="helpBtn">Инструкция</button>
 
   <div class="tabs" id="stepTabs">

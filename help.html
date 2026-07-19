@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Инструкция — Монитор BPM V2</title>
+  <title>Инструкция — Монитор BPM V2alt</title>
   <style>
     :root {
       --bg: #f4f6f8;
@@ -63,6 +63,7 @@
     }
     ol, ul { margin: 0; padding-left: 1.25rem; }
     li { margin: 6px 0; font-size: 14px; }
+    p { font-size: 14px; }
     code, .path, .msg {
       font-family: ui-monospace, Consolas, monospace;
       font-size: 12px;
@@ -135,19 +136,26 @@
 <body>
   <header>
     <h1>Монитор задач BPM V2alt</h1>
-    <p>Вариант с отдельными дашбордами 4002 / 4003 / 4004. Таймеры и схемы — как в V2.</p>
+    <p>
+      Альтернативная сборка: задачи ПРЗ / ФРЗ / ПКМ читаются с трёх отдельных дашбордов
+      (4002 / 4003 / 4004), а не с общего «Работа». Таймеры и схемы — как в V2.
+    </p>
   </header>
 
   <main>
     <section>
-      <h2>1. Установка в разных браузерах</h2>
-      <p style="font-size:14px;margin:0 0 10px">Это расширение для <strong>Chrome, Edge и Яндекс.Браузера</strong>. Если вы используете Firefox, то файлы для расширения можно скачать отсюда: <a href="https://github.com/yakrovey/bpm-monitor-simple-V2_mozilla" target="_blank" rel="noopener noreferrer">https://github.com/yakrovey/bpm-monitor-simple-V2_mozilla</a></p>
+      <h2>1. Установка</h2>
+      <p style="margin:0 0 10px">
+        Расширение для <strong>Chrome, Edge и Яндекс.Браузера</strong>.
+        Загружайте папку <span class="path">bpm-monitor-simple-V2alt</span>
+        (не путать с обычной V2 и с Firefox-сборкой).
+      </p>
 
       <h3>Google Chrome</h3>
       <ol>
         <li>Откройте <code>chrome://extensions</code></li>
         <li>Включите <strong>Режим разработчика</strong></li>
-        <li><strong>Загрузить распакованное расширение</strong> → папка <span class="path">bpm-monitor-simple-V2</span></li>
+        <li><strong>Загрузить распакованное расширение</strong> → папка <span class="path">bpm-monitor-simple-V2alt</span></li>
         <li>Разрешите уведомления, если спросит</li>
       </ol>
 
@@ -155,67 +163,87 @@
       <ol>
         <li>Откройте <code>edge://extensions</code></li>
         <li>Включите <strong>Режим разработчика</strong></li>
-        <li><strong>Загрузить распакованное</strong> → та же папка</li>
+        <li><strong>Загрузить распакованное</strong> → та же папка V2alt</li>
       </ol>
 
       <h3>Яндекс.Браузер</h3>
       <ol>
         <li>Откройте <code>browser://extensions</code> или Меню → Дополнения → Расширения</li>
         <li>Включите режим разработчика</li>
-        <li>Загрузите распакованное расширение из папки проекта</li>
+        <li>Загрузите распакованное расширение из папки <span class="path">bpm-monitor-simple-V2alt</span></li>
       </ol>
-      <p class="note">Chrome / Edge / Яндекс основаны на Chromium — используется файл <code>manifest.json</code> как есть.</p>
-
-      <h3>Apple Safari (macOS)</h3>
-      <ol>
-        <li>Safari не загружает папку Chrome «как есть» — нужен <strong>Safari Web Extension</strong></li>
-        <li>На Mac с Xcode:
-          <pre style="background:#eef2f7;padding:10px;border-radius:8px;overflow:auto;font-size:12px">xcrun safari-web-extension-converter "/путь/к/bpm-monitor-simple-V2" --app-name "BPM Monitor V2"</pre>
-        </li>
-        <li>Откройте созданный проект в Xcode → Run</li>
-        <li>Safari → Настройки → Расширения → включите «BPM Monitor V2»</li>
-        <li>Разрешите доступ к сайту <code>workplace.ertelecom.ru</code></li>
-      </ol>
-      <p class="note warn">Для распространения вне вашего Mac нужна учётная запись Apple Developer. На Windows/Linux Safari-расширение не ставится.</p>
-
-      <p class="note">После любых правок файлов в Chromium-браузерах нажимайте «Обновить» на карточке расширения.</p>
+      <p class="note">После обновления файлов нажимайте «Обновить» на карточке расширения.</p>
+      <p class="note warn">Не включайте одновременно обычную V2 и V2alt без нужды — оба будут мониторить BPM.</p>
     </section>
 
     <section>
-      <h2>2. Источники данных (V2alt)</h2>
-      <p style="font-size:14px;margin:0 0 10px">Расширение само держит <strong>три закреплённые фоновые вкладки</strong> и раз в минуту читает каждую:</p>
-      <ul>
-        <li><strong>ПРЗ</strong> — <span class="path">…/SYSRP/4002</span></li>
-        <li><strong>ФРЗ</strong> — <span class="path">…/SYSRP/4003</span></li>
-        <li><strong>ПКМ</strong> — <span class="path">…/SYSRP/4004</span></li>
-      </ul>
-      <p class="note">Не закрывайте эти вкладки без нужды. Достаточно один раз войти в BPM в любой из них — сессия общая. Кнопка «Открыть BPM» поднимает все три дашборда.</p>
+      <h2>2. Источники данных</h2>
+      <p style="margin:0 0 10px">
+        В отличие от V2 (один дашборд «Работа»), V2alt держит
+        <strong>три закреплённые вкладки</strong> и раз в минуту читает каждую:
+      </p>
+      <table>
+        <thead><tr><th>Шаг</th><th>Дашборд</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>ПРЗ</strong></td>
+            <td><span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002</span></td>
+          </tr>
+          <tr>
+            <td><strong>ФРЗ</strong></td>
+            <td><span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4003</span></td>
+          </tr>
+          <tr>
+            <td><strong>ПКМ</strong></td>
+            <td><span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4004</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Тип задачи задаёт сам дашборд (4002 → ПРЗ, 4003 → ФРЗ, 4004 → ПКМ).
+        Достаточно один раз войти в BPM в любой вкладке — сессия общая.
+      </p>
     </section>
 
     <section>
       <h2>3. Первый запуск</h2>
       <ol>
-        <li>Войдите в BPM (любой дашборд workplace.ertelecom.ru). Расширение откроет 4002/4003/4004 само:<br>
-          <span class="path">https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/4002</span> и соседние
-        </li>
-        <li>Вкладку можно свернуть, но <strong>не закрывайте</strong> — BPM сам подставляет задачи, расширение страницу не перезагружает</li>
-        <li>Иконка расширения → <strong>Проверить сейчас</strong></li>
+        <li>При старте браузера расширение <strong>ничего не делает</strong> (режим ожидания).</li>
+        <li>Откройте иконку расширения → нажмите <strong>Запустить</strong>.</li>
+        <li>Откроются 3 закреплённые вкладки дашбордов (4002 / 4003 / 4004).</li>
+        <li>Если появится окно входа — авторизуйтесь в BPM.</li>
+        <li>Через ~1 минуту будет первая проверка. Дальше опрос раз в минуту.</li>
       </ol>
+      <p class="note warn">
+        Вкладки лучше не закрывать. Если закрыли — нажмите
+        <strong>Проверить сейчас</strong>: закрытые откроются снова, открытые просто перечитаются.
+      </p>
     </section>
 
     <section>
-      <h2>3. Что отслеживается</h2>
+      <h2>4. Кнопки в окне расширения</h2>
       <ul>
-        <li>Только темы с <strong>ПРЗ</strong>, <strong>ФРЗ</strong> или <strong>ПКМ</strong></li>
-        <li>«Шаг 1.2 / 3.1 / 5.1» и прочие шаги <strong>игнорируются</strong></li>
+        <li><strong>Запустить</strong> — первый старт: открыть 3 дашборда и включить мониторинг.</li>
+        <li><strong>Проверить сейчас</strong> — сразу снять данные; при необходимости переоткрыть закрытые вкладки 4002/4003/4004.</li>
+        <li>
+          <strong>не показывать уведомления</strong> /
+          <strong>показывать уведомления</strong> — выключить или включить всплывающие уведомления.
+          Рядом индикатор: <span style="color:#2e7d32;font-weight:700">● зелёный</span> — уведомления вкл,
+          <span style="color:#c62828;font-weight:700">● красный</span> — выкл.
+        </li>
+        <li><strong>Инструкция</strong> — эта страница.</li>
       </ul>
+      <p class="note">
+        Даже при выключенных всплывающих уведомлениях сбор задач и таймеры в окне расширения продолжают работать.
+        Отдельно: пороги по срокам приходят только в рабочее время (пн–пт 09:00–18:00).
+      </p>
     </section>
 
     <section>
       <h2>5. Вкладки ПРЗ / ФРЗ / ПКМ</h2>
       <ul>
         <li>В окне расширения три вкладки: <strong>ПРЗ</strong>, <strong>ФРЗ</strong>, <strong>ПКМ</strong></li>
-        <li>В каждой вкладке — только задачи этого шага</li>
+        <li>В каждой — только задачи этого шага</li>
         <li>На кнопках вкладок цветные счётчики:
           <div class="colors">
             <span class="chip" style="background:#c8e6c9">зелёные</span>
@@ -225,42 +253,54 @@
             <span class="chip" style="background:#fff;border-color:#bbb">белый — ВОЛС (если есть)</span>
           </div>
         </li>
-        <li>Число на счётчике = сколько заявок сейчас в этом цвете на шаге</li>
       </ul>
+      <p class="note">
+        Если снимок ФРЗ на мгновение пустой (нестабильная отрисовка дашборда), список не обнуляется сразу —
+        выбранные схемы запоминаются и восстанавливаются.
+      </p>
     </section>
 
     <section>
-      <h2>5. Таймер и рабочее время</h2>
+      <h2>6. Таймер и рабочее время</h2>
       <ul>
         <li>Отсчёт от <strong>даты/времени со страницы</strong> (как в мастер-системе)</li>
         <li>Считается только <strong>пн–пт, 09:00–18:00</strong>; ночью и в выходные — пауза</li>
-        <li><strong>Сбор статуса</strong> — всегда; <strong>уведомления</strong> — только в рабочее время</li>
-        <li>В уведомлениях всегда есть <strong>клиент</strong> и <strong>адрес / название</strong></li>
+        <li><strong>Сбор статуса</strong> — всегда (когда монитор запущен); <strong>уведомления по срокам</strong> — только в рабочее время</li>
+        <li>В уведомлениях есть <strong>клиент</strong> и <strong>адрес / название</strong></li>
       </ul>
     </section>
 
     <section>
-      <h2>6. Смена схемы на ФРЗ и ПКМ</h2>
-      <p style="font-size:14px;margin:0 0 8px">На шагах <strong>ФРЗ</strong> и <strong>ПКМ</strong> можно сменить схему уведомлений и сроков. На <strong>ПРЗ</strong> схема одна — менять нечего.</p>
+      <h2>7. Смена схемы на ФРЗ и ПКМ</h2>
+      <p style="margin:0 0 8px">
+        На шагах <strong>ФРЗ</strong> и <strong>ПКМ</strong> можно сменить схему уведомлений и сроков.
+        На <strong>ПРЗ</strong> схема одна.
+      </p>
       <ol>
         <li>Откройте вкладку <strong>ФРЗ</strong> или <strong>ПКМ</strong></li>
         <li>Нажмите на нужную задачу в списке</li>
-        <li>В окне «Сменить схему в уведомлении?» выберите:
+        <li>Выберите:
           <ul>
             <li><strong>Обычная схема</strong> — стандартные сроки</li>
-            <li><strong>Радио</strong> — другие пороги и тексты уведомлений</li>
-            <li><strong>Схема 2 ВОЛС</strong> — таймер выключается, заявка белая; для ФРЗ — напоминание раз в 48 ч, для ПКМ — без уведомлений</li>
+            <li><strong>Радио</strong> — другие пороги и тексты</li>
+            <li><strong>Схема 2 ВОЛС</strong> — таймер выкл., заявка белая; для ФРЗ — напоминание раз в 48 ч, для ПКМ — без уведомлений</li>
           </ul>
         </li>
         <li>Нажмите <strong>Применить</strong></li>
       </ol>
-      <p class="note">Текущая схема у задачи видна в карточке («Схема: Обычная / Радио / ВОЛС»).</p>
+      <p class="note">
+        Выбор схемы сохраняется локально и не должен сбрасываться при кратковременном «мигании» счётчика ФРЗ.
+      </p>
     </section>
 
     <section>
       <h2>8. Сроки, цвета и уведомления</h2>
-      <p style="font-size:14px;color:#5f6b76;margin:0 0 8px">Ниже — <strong>рабочие часы</strong> от времени старта со страницы (кроме ВОЛС).</p>
-      <p class="note">Когда заявка <strong>становится синей</strong> (просрочка) на любом шаге — ПРЗ, ФРЗ или ПКМ — приходит уведомление <span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span> (один раз, в момент перехода). Уже просроченные на первом снимке не спамят.</p>
+      <p style="color:#5f6b76;margin:0 0 8px">Ниже — <strong>рабочие часы</strong> от времени старта со страницы (кроме ВОЛС).</p>
+      <p class="note">
+        Когда заявка <strong>становится синей</strong> (просрочка) — приходит
+        <span class="msg">ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ</span>
+        (один раз, в момент перехода). Уже просроченные на первом снимке не спамят.
+      </p>
 
       <h3>ПРЗ</h3>
       <table>
@@ -338,17 +378,17 @@
     </section>
 
     <section>
-      <h2>8. Кнопки</h2>
+      <h2>9. Если что-то не работает</h2>
       <ul>
-        <li><strong>Проверить сейчас</strong> — считать задачи с дашборда</li>
-        <li><strong>Открыть / показать вкладку BPM</strong> — перейти к «Работа»</li>
-        <li><strong>Инструкция</strong> — эта страница</li>
+        <li>Нет задач / статус «Пауза» — проверьте вход в BPM на любой из вкладок 4002/4003/4004, затем <strong>Проверить сейчас</strong>.</li>
+        <li>Сообщение «ПОХОЖЕ, ВХОД В BPMS НЕ ВЫПОЛНЕН» — авторизуйтесь; после успешного входа предупреждение само прекращается.</li>
+        <li>Закрыли вкладки дашбордов — снова <strong>Проверить сейчас</strong> (или перезапустите через «Запустить», если монитор был остановлен).</li>
+        <li>После правок файлов — «Обновить» на <code>chrome://extensions</code>.</li>
       </ul>
-      <p class="note warn">Если список пуст: откройте дашборд «Работа», обновите расширение и снова нажмите «Проверить сейчас».</p>
     </section>
 
     <section>
-      <h2>9. Приватность</h2>
+      <h2>10. Приватность</h2>
       <ul>
         <li>Данные только в браузере (<code>chrome.storage.local</code>)</li>
         <li>Сеть — только <code>workplace.ertelecom.ru</code></li>
@@ -358,7 +398,7 @@
   </main>
 
   <footer>
-    Монитор BPM V2 · локальный режим<br>
+    Монитор BPM V2alt · 3 дашборда · локальный режим<br>
     <div class="copyright">made by krylov.iav</div>
   </footer>
 </body>
