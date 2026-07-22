@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BPM Virtual Stand · SYSRP/13202</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+    header { background: #1a237e; color: #fff; padding: 12px 16px; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ddd; }
+    button { padding: 6px 10px; border: 1px solid #bbb; border-radius: 6px; background: #fff; cursor: pointer; }
+    button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    .meta { padding: 8px 16px; font-size: 12px; color: #555; }
+    .grid-wrap { margin: 0 16px 24px; background: #fff; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
+    .ui-grid { display: block; }
+    .ui-grid-header { display: grid; grid-template-columns: 2.2fr 2.4fr 1fr 1.2fr 1.2fr; background: #eceff1; font-size: 12px; font-weight: 600; }
+    .ui-grid-header-cell, .ui-grid-cell { padding: 8px 10px; border-right: 1px solid #e0e0e0; border-bottom: 1px solid #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ui-grid-viewport { max-height: 420px; overflow: auto; }
+    .taskGridRow { display: grid; grid-template-columns: 2.2fr 2.4fr 1fr 1.2fr 1.2fr; font-size: 12px; }
+    .taskGridRow:hover { background: #f5f9ff; }
+    .pager { padding: 8px 12px; font-size: 12px; color: #666; border-top: 1px solid #eee; }
+    #log { margin: 0 16px 24px; padding: 10px; background: #111; color: #9f9; font: 12px/1.4 ui-monospace, monospace; max-height: 180px; overflow: auto; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Работа · дашборд SYSRP/13202 (виртуальный стенд)</h1>
+  </header>
+
+  <div class="toolbar">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="Введите текст поиска"
+      style="flex:1; min-width:180px; padding:6px 10px; border:1px solid #bbb; border-radius:6px;"
+    />
+    <button class="primary" id="btnRefresh" title="Обновить список задач">Обновить</button>
+    <button id="btnAddPrz">+ ПРЗ</button>
+    <button id="btnAddPkm">+ ПКМ</button>
+    <button id="btnAddFrz">+ ФРЗ</button>
+    <button id="btnCompleteOldest">Отработать первую</button>
+    <button id="btnCorruptSos">Подложить СОС в client</button>
+    <button id="btnStaleMode">Режим «окно неактивно»</button>
+    <button id="btnHiddenSim">document.hidden = true</button>
+  </div>
+
+  <div class="meta" id="meta">Готов</div>
+
+  <div class="grid-wrap">
+    <div class="ui-grid" id="taskGrid">
+      <div class="ui-grid-header">
+        <div class="ui-grid-header-cell ui-grid-col-0">Тема задачи</div>
+        <div class="ui-grid-header-cell ui-grid-col-1">Имя экземпляра</div>
+        <div class="ui-grid-header-cell ui-grid-col-2">СОС</div>
+        <div class="ui-grid-header-cell ui-grid-col-3">Дата получения задачи</div>
+        <div class="ui-grid-header-cell ui-grid-col-4">Дата создания экземпляра</div>
+      </div>
+      <div class="ui-grid-viewport" id="viewport"></div>
+      <div class="pager" id="pager">1–0 of 0</div>
+    </div>
+  </div>
+
+  <pre id="log"></pre>
+  <script src="dashboard.js"></script>
+</body>
+</html>

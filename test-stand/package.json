@@ -1,0 +1,13 @@
+{
+  "name": "bpm-monitor-test-stand",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stand": "node run-stand.mjs",
+    "server": "node server.mjs",
+    "timers": "node run-timers.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
+}

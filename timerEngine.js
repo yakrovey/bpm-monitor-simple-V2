@@ -3,7 +3,8 @@ import {
   formatBusinessDuration,
   hours,
   hoursMinutes,
-  isWorkTime
+  isWorkTime,
+  parseRussianDateTime
 } from './businessTime.js';
 
 /** Цвета с читаемым чёрным текстом */
@@ -13,11 +14,13 @@ export const ZONE_COLORS = {
   red: '#ef9a9a',
   overdue: '#90caf9',
   vols: '#ffffff',
+  montage: '#eceff1',
   paused: null
 };
 
 export function getStepFamily(type) {
   if (!type) return null;
+  if (type.includes('Монтаж') || type.includes('НМУ КРУС')) return 'montage';
   if (type.includes('ПРЗ')) return 'prz';
   if (type.includes('ФРЗ')) return 'frz';
   if (type.includes('ПКМ')) return 'pkm';
@@ -27,6 +30,53 @@ export function getStepFamily(type) {
 export function supportsSchemeSwitch(type) {
   const family = getStepFamily(type);
   return family === 'frz' || family === 'pkm';
+}
+
+/**
+ * СОС (схема подключения) со страницы → схема таймеров.
+ * P2P/P2MP → radio; ВОЛС → vols; медный кабель → default (схема 1).
+ * null — распознать не удалось.
+ */
+export function schemeFromSos(sosText) {
+  const raw = String(sosText || '').trim();
+  if (!raw) return null;
+  const t = raw.toLowerCase().replace(/\s+/g, ' ');
+
+  // Радио — по маркерам P2P / P2MP (даже если рядом есть «ВОЛС»)
+  if (/\bp2mp\b|\bp2p\b|p2mp|p2p/i.test(raw)) return 'radio';
+
+  // ВОЛС
+  if (
+    t.includes('волс') ||
+    t.includes('vols') ||
+    t.includes('оптоволок') ||
+    t.includes('fiber')
+  ) {
+    return 'vols';
+  }
+
+  // Схема 1 — медный кабель
+  if (
+    t.includes('медн') ||
+    t.includes('медь') ||
+    t.includes('кабел') ||
+    t.includes('copper') ||
+    /\bcu\b/i.test(raw) ||
+    t.includes('схема 1') ||
+    t.includes('сх.1') ||
+    t.includes('сх 1')
+  ) {
+    return 'default';
+  }
+  return null;
+}
+
+/** Короткая метка СОС/схемы — не имя клиента и не экземпляр. */
+export function looksLikeSchemeLabel(text) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.length > 80) return false;
+  if (schemeFromSos(raw)) return true;
+  return /^(волс|медь|медный|copper|cu|radio|радио|p2p|p2mp)$/i.test(raw);
 }
 
 function zoneByRanges(elapsed, ranges) {
@@ -44,6 +94,17 @@ function zoneByRanges(elapsed, ranges) {
  * danger — повторяющиеся в красной «опасной» зоне.
  */
 export function getSchemeConfig(family, scheme) {
+  if (family === 'montage' || (scheme === 'montage' && family === 'pkm')) {
+    return {
+      mode: 'montage',
+      ranges: [{ until: Infinity, zone: 'montage' }],
+      milestones: [],
+      danger: null,
+      overdueAfter: null,
+      volsIntervalMs: null
+    };
+  }
+
   if (scheme === 'vols' && family === 'pkm') {
     return {
       mode: 'vols',
@@ -255,32 +316,91 @@ export function buildNotifyBody(task, text) {
   return lines.join('\n');
 }
 
+/** Единый источник старта таймера: дата со страницы → appearedAt → now. */
+export function resolveAppearedAtForTimer(task, now = Date.now()) {
+  const scheme = task?.scheme || 'default';
+  if (scheme === 'vols' || scheme === 'montage') {
+    return task.schemeChangedAt || task.appearedAt || now;
+  }
+  if (task?.date) {
+    const fromPage = parseRussianDateTime(task.date);
+    if (fromPage != null) return fromPage;
+  }
+  if (task?.appearedAt && Number.isFinite(Number(task.appearedAt))) {
+    return Number(task.appearedAt);
+  }
+  return now;
+}
+
+/**
+ * Синхронизация appearedAt с датой страницы и корректировка notified.
+ * При смене даты старые пороги помечаются без уведомления.
+ */
+export function reconcileNotifiedThresholds(task, now = Date.now()) {
+  const family = getStepFamily(task.type);
+  const scheme = task.scheme || 'default';
+  const config = getSchemeConfig(family, scheme);
+  const appearedAt = resolveAppearedAtForTimer(task, now);
+  const prevAppearedAt = task.appearedAt;
+  const appearedAtChanged =
+    prevAppearedAt != null &&
+    Math.abs(prevAppearedAt - appearedAt) > 60 * 1000;
+
+  if (config.mode === 'vols' || config.mode === 'montage') {
+    return { ...task, appearedAt, lastElapsedMs: task.lastElapsedMs ?? 0 };
+  }
+
+  const elapsed = businessMsBetween(appearedAt, now);
+  const notified = new Set(task.notified || []);
+
+  for (const milestone of config.milestones || []) {
+    if (milestone.onlyOnAppear) continue;
+    if (elapsed < milestone.at) {
+      notified.delete(milestone.id);
+    } else if (appearedAtChanged) {
+      notified.add(milestone.id);
+    }
+  }
+  if (config.overdueAfter != null) {
+    if (elapsed < config.overdueAfter) notified.delete('overdue');
+    else if (appearedAtChanged) notified.add('overdue');
+  }
+
+  return {
+    ...task,
+    appearedAt,
+    notified: Array.from(notified),
+    lastElapsedMs: appearedAtChanged ? elapsed : task.lastElapsedMs
+  };
+}
+
 export function evaluateTimer(task, now = Date.now()) {
   const family = getStepFamily(task.type);
   const scheme = task.scheme || 'default';
   const config = getSchemeConfig(family, scheme);
   const workingNow = isWorkTime(new Date(now));
 
-  if (config.mode === 'vols') {
+  if (config.mode === 'vols' || config.mode === 'montage') {
     const since = task.schemeChangedAt || task.appearedAt || now;
     const wallElapsed = Math.max(0, now - since);
+    const isMontage = config.mode === 'montage';
     return {
       family,
       scheme,
-      mode: 'vols',
-      zone: 'vols',
-      color: ZONE_COLORS.vols,
+      mode: config.mode,
+      zone: isMontage ? 'montage' : 'vols',
+      color: isMontage ? ZONE_COLORS.montage : ZONE_COLORS.vols,
       elapsedMs: 0,
       wallElapsedMs: wallElapsed,
-      elapsedLabel: 'ВОЛС · таймер выкл',
+      elapsedLabel: isMontage ? 'Монтаж · таймер выкл' : 'ВОЛС · таймер выкл',
       workingNow,
-      paused: false,
+      paused: true,
       config,
       supportsSchemeSwitch: supportsSchemeSwitch(task.type)
     };
   }
 
-  const appearedAt = task.appearedAt || now;
+  const appearedAt = resolveAppearedAtForTimer(task, now);
   const elapsedMs = businessMsBetween(appearedAt, now);
   let { zone, color } = zoneByRanges(elapsedMs, config.ranges);
 
@@ -331,7 +451,8 @@ export function collectDueNotifications(
     elapsedMs: evalResult.elapsedMs,
     elapsedLabel: evalResult.elapsedLabel,
     paused: evalResult.paused,
-    workingNow: evalResult.workingNow
+    workingNow: evalResult.workingNow,
+    lastElapsedMs: evalResult.elapsedMs
   };
 
   if (!allowNotify) {
@@ -347,7 +468,7 @@ export function collectDueNotifications(
     };
   }
 
-  if (config.mode === 'vols') {
+  if (config.mode === 'vols' || config.mode === 'montage') {
     const since = task.schemeChangedAt || task.appearedAt || now;
     if (!config.volsIntervalMs) {
       return {
@@ -388,17 +509,24 @@ export function collectDueNotifications(
   }
 
   const elapsed = evalResult.elapsedMs;
+  const prevElapsed =
+    task.lastElapsedMs != null && Number.isFinite(task.lastElapsedMs)
+      ? task.lastElapsedMs
+      : null;
 
   for (const milestone of config.milestones || []) {
     if (milestone.onlyOnAppear) continue;
-    if (elapsed >= milestone.at && !notified.has(milestone.id)) {
+    if (elapsed < milestone.at) continue;
+    if (notified.has(milestone.id)) continue;
+
+    if (prevElapsed != null && prevElapsed < milestone.at) {
       due.push({
         key: milestone.id,
         title: task.type,
         message: buildNotifyBody(task, milestone.text)
       });
-      notified.add(milestone.id);
     }
+    notified.add(milestone.id);
   }
 
   if (
@@ -406,11 +534,13 @@ export function collectDueNotifications(
     elapsed >= config.overdueAfter &&
     !notified.has('overdue')
   ) {
-    due.push({
-      key: 'overdue',
-      title: task.type,
-      message: buildNotifyBody(task, config.overdueText)
-    });
+    if (prevElapsed != null && prevElapsed < config.overdueAfter) {
+      due.push({
+        key: 'overdue',
+        title: task.type,
+        message: buildNotifyBody(task, config.overdueText)
+      });
+    }
     notified.add('overdue');
   }
 
@@ -448,7 +578,7 @@ export function collectDueNotifications(
 export function appearNotificationFor(task) {
   const family = getStepFamily(task.type);
   const scheme = task.scheme || 'default';
-  if (scheme === 'vols') return null;
+  if (family === 'montage' || scheme === 'vols' || scheme === 'montage') return null;
 
   if (family === 'pkm' && scheme === 'default') {
     return {

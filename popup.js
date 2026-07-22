@@ -1,4 +1,4 @@
-import { evaluateTimer, getStepFamily } from './timerEngine.js';
+import { evaluateTimer, getStepFamily, looksLikeSchemeLabel, resolveAppearedAtForTimer } from './timerEngine.js';
 import {
   formatBusinessDuration,
   businessMsBetween,
@@ -7,12 +7,13 @@ import {
 import { ext } from './extApi.js';
 
 const TARGET_URL =
-  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/RESPONSIVE_WORK';
+  'https://workplace.ertelecom.ru/ProcessPortal/dashboards/SYSRP/13202';
 
 const TAB_LABELS = {
   prz: 'ПРЗ',
   frz: 'ФРЗ',
-  pkm: 'ПКМ'
+  pkm: 'ПКМ',
+  montage: 'Монтаж'
 };
 
 function escapeHtml(value) {
@@ -53,7 +54,14 @@ function statusLabel(monitorStatus) {
 function schemeLabel(scheme) {
   if (scheme === 'radio') return 'Радио';
   if (scheme === 'vols') return 'ВОЛС';
+  if (scheme === 'montage') return 'Монтаж';
   return 'Обычная';
+}
+
+function schemeHint(task) {
+  const scheme = task.scheme || 'default';
+  if (task.sos) return `${schemeLabel(scheme)} · СОС: ${task.sos}`;
+  return schemeLabel(scheme);
 }
 
 function liveElapsed(task) {
@@ -61,17 +69,35 @@ function liveElapsed(task) {
   if ((task.scheme || 'default') === 'vols') {
     return {
       label: 'ВОЛС · таймер выкл',
-      paused: false,
+      paused: true,
       color: '#ffffff',
       zone: 'vols'
     };
   }
-  const evalResult = evaluateTimer(task, now);
+  if ((task.scheme || 'default') === 'montage') {
+    return {
+      label: 'Монтаж · таймер выкл',
+      paused: true,
+      color: '#eceff1',
+      zone: 'montage'
+    };
+  }
+  const appearedAt = resolveAppearedAtForTimer(task, now);
+  const elapsedMs = businessMsBetween(appearedAt, now);
+  const evalResult = evaluateTimer({ ...task, appearedAt }, now);
+  const paused = !isWorkTime(new Date(now));
+  let pauseLabel = paused ? '⏸ пауза (вне раб. времени)' : '▶ раб. время';
+  // Заявка создана уже после 18:00 — до завтрашнего 09:00 рабочих минут = 0
+  if (paused && elapsedMs === 0 && appearedAt < now) {
+    const created = new Date(appearedAt);
+    if (!isWorkTime(created)) {
+      pauseLabel = '⏸ ждёт раб. дня (создана вне 9–18)';
+    }
+  }
   return {
-    label: formatBusinessDuration(
-      businessMsBetween(task.appearedAt || now, now)
-    ),
-    paused: !isWorkTime(new Date(now)),
+    label: formatBusinessDuration(elapsedMs),
+    paused,
+    pauseLabel,
     color: evalResult.color,
     zone: evalResult.zone
   };
@@ -82,7 +108,7 @@ function zoneBucket(zone) {
   if (zone === 'yellow') return 'yellow';
   if (zone === 'red') return 'red';
   if (zone === 'overdue') return 'blue';
-  if (zone === 'vols') return 'vols';
+  if (zone === 'vols' || zone === 'montage') return 'vols';
   return 'blue';
 }
 
@@ -94,7 +120,8 @@ function buildStats(history) {
   const stats = {
     prz: emptyStats(),
     frz: emptyStats(),
-    pkm: emptyStats()
+    pkm: emptyStats(),
+    montage: emptyStats()
   };
 
   for (const task of history) {
@@ -135,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const schemeTaskTitle = document.getElementById('schemeTaskTitle');
   const schemeCancel = document.getElementById('schemeCancel');
   const schemeSave = document.getElementById('schemeSave');
+  const schemeMontageLabel = document.getElementById('schemeMontageLabel');
   const stepTabs = document.getElementById('stepTabs');
 
   let currentHistory = [];
@@ -155,7 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function filteredTasks() {
     return currentHistory.filter(
-      (t) => getStepFamily(t.type) === activeTab
+      (t) =>
+        getStepFamily(t.type) === activeTab &&
+        String(t.title || '').trim() &&
+        !looksLikeSchemeLabel(t.client)
     );
   }
 
@@ -163,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTabStats(document.getElementById('statsPrz'), stats.prz);
     renderTabStats(document.getElementById('statsFrz'), stats.frz);
     renderTabStats(document.getElementById('statsPkm'), stats.pkm);
+    renderTabStats(document.getElementById('statsMontage'), stats.montage);
 
     for (const btn of stepTabs.querySelectorAll('.tab')) {
       btn.classList.toggle('active', btn.dataset.tab === activeTab);
@@ -180,7 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
     tabHint.textContent =
       activeTab === 'prz'
         ? 'Для ПРЗ схема одна — смена не требуется.'
-        : 'Клик по задаче — сменить схему (обычная / радио / ВОЛС).';
+        : activeTab === 'montage'
+          ? 'ПКМ: состояние НМУ КРУС. Таймер выключен (режим монтажа).'
+          : 'Схема берётся из колонки СОС (медь / ВОЛС / P2P·P2MP). Клик — ручная смена.';
 
     if (!list.length) {
       historyList.innerHTML = `
@@ -205,16 +239,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return `
           <div class="history-item ${clickable}" data-id="${escapeHtml(item.id)}" ${hint}
-               style="background:${escapeHtml(bg)}; border-color:${item.scheme === 'vols' ? '#bdbdbd' : 'transparent'}">
+               style="background:${escapeHtml(bg)}; border-color:${item.scheme === 'vols' || item.scheme === 'montage' ? '#bdbdbd' : 'transparent'}">
             <span class="type">${escapeHtml(item.type || 'Задача')}</span>
             <div class="title">${escapeHtml(item.title || 'Без названия')}</div>
-            ${item.client ? `<div class="client">Клиент: ${escapeHtml(item.client)}</div>` : ''}
+            ${item.client && !looksLikeSchemeLabel(item.client) ? `<div class="client">Клиент: ${escapeHtml(item.client)}</div>` : ''}
             ${item.address ? `<div class="client">Адрес: ${escapeHtml(item.address)}</div>` : ''}
-            ${item.date ? `<div class="date">Старт (со стр.): ${escapeHtml(item.date)}</div>` : ''}
-            <div class="scheme">Схема: ${escapeHtml(schemeLabel(item.scheme))}</div>
+            ${item.date ? `<div class="date">Дата создания экземпляра: ${escapeHtml(item.date)}</div>` : '<div class="date">Дата создания экземпляра: не считана</div>'}
+            <div class="scheme">Схема: ${escapeHtml(schemeHint(item))}</div>
             <div class="timer-row">
               <span class="timer" data-timer-id="${escapeHtml(item.id)}">${escapeHtml(live.label)}</span>
-              <span class="pause">${live.paused ? '⏸ пауза (вне раб. времени)' : '▶ раб. время'}</span>
+              <span class="pause">${escapeHtml(live.pauseLabel || (live.paused ? '⏸ пауза (вне раб. времени)' : '▶ раб. время'))}</span>
             </div>
           </div>
         `;
@@ -251,9 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.background = live.color || item.color || '#eee';
       const pauseEl = row.querySelector('.pause');
       if (pauseEl) {
-        pauseEl.textContent = live.paused
-          ? '⏸ пауза (вне раб. времени)'
-          : '▶ раб. время';
+        pauseEl.textContent =
+          live.pauseLabel ||
+          (live.paused
+            ? '⏸ пауза (вне раб. времени)'
+            : '▶ раб. время');
       }
     });
     updateTabButtons(buildStats(currentHistory));
@@ -274,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
       metaEl.innerHTML = `
         <div><strong>Последняя проверка:</strong> ${escapeHtml(formatTime(response.lastCheckAt))}</div>
         <div><strong>Активных:</strong> ${escapeHtml(response.activeCount)} · <strong>известно:</strong> ${escapeHtml(response.knownCount)}</div>
+        <div><strong>Обновление списка:</strong> каждые ${escapeHtml(response.checkPeriodMinutes ?? 1)} мин (фон) · popup: ${escapeHtml(response.popupRefreshSec ?? 5)} с · таймер: ${escapeHtml(response.timerTickSec ?? 1)} с</div>
         <div><strong>Сбор статуса:</strong> всегда · <strong>Уведомления:</strong> ${
           response.notificationsEnabled
             ? 'сейчас включены'
@@ -321,7 +358,12 @@ document.addEventListener('DOMContentLoaded', () => {
     schemeTaskId = id;
     schemeTaskTitle.textContent = task.title || id;
     const current = task.scheme || 'default';
+    const isPkm = getStepFamily(task.type) === 'pkm';
+    if (schemeMontageLabel) {
+      schemeMontageLabel.hidden = !isPkm;
+    }
     for (const input of schemeModal.querySelectorAll('input[name="scheme"]')) {
+      if (input.value === 'montage' && !isPkm) continue;
       input.checked = input.value === current;
     }
     schemeModal.classList.add('open');

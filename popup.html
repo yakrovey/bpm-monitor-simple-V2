@@ -61,10 +61,15 @@
       color: #37474f;
     }
     .tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .tabs-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 6px;
-      margin-bottom: 10px;
     }
     .tab {
       border: 1px solid #d0d7de;
@@ -73,6 +78,9 @@
       padding: 8px 6px;
       cursor: pointer;
       text-align: center;
+    }
+    .tab-wide {
+      width: 100%;
     }
     .tab:hover { filter: brightness(0.98); }
     .tab.active {
@@ -283,17 +291,23 @@
   <button class="btn secondary" id="helpBtn">Инструкция</button>
 
   <div class="tabs" id="stepTabs">
-    <button type="button" class="tab active" data-tab="prz" id="tabPrz">
-      <div class="tab-name">ПРЗ</div>
-      <div class="tab-stats" id="statsPrz"></div>
-    </button>
-    <button type="button" class="tab" data-tab="frz" id="tabFrz">
-      <div class="tab-name">ФРЗ</div>
-      <div class="tab-stats" id="statsFrz"></div>
-    </button>
-    <button type="button" class="tab" data-tab="pkm" id="tabPkm">
-      <div class="tab-name">ПКМ</div>
-      <div class="tab-stats" id="statsPkm"></div>
+    <div class="tabs-row">
+      <button type="button" class="tab active" data-tab="prz" id="tabPrz">
+        <div class="tab-name">ПРЗ</div>
+        <div class="tab-stats" id="statsPrz"></div>
+      </button>
+      <button type="button" class="tab" data-tab="frz" id="tabFrz">
+        <div class="tab-name">ФРЗ</div>
+        <div class="tab-stats" id="statsFrz"></div>
+      </button>
+      <button type="button" class="tab" data-tab="pkm" id="tabPkm">
+        <div class="tab-name">ПКМ</div>
+        <div class="tab-stats" id="statsPkm"></div>
+      </button>
+    </div>
+    <button type="button" class="tab tab-wide" data-tab="montage" id="tabMontage">
+      <div class="tab-name">Монтаж</div>
+      <div class="tab-stats" id="statsMontage"></div>
     </button>
   </div>
 
@@ -302,12 +316,12 @@
       <span id="listTitle">ПРЗ</span>
       <span class="count-badge" id="taskCount">0</span>
     </h4>
-    <div class="tab-hint" id="tabHint">На вкладке ФРЗ и ПКМ можно сменить схему кликом по задаче.</div>
+    <div class="tab-hint" id="tabHint">На вкладке ФРЗ и ПКМ можно сменить схему кликом по задаче. Монтаж — ПКМ: состояние НМУ КРУС.</div>
     <div class="history-empty">Нет активных задач</div>
   </div>
 
   <div class="footer">
-    Вкладки ПРЗ / ФРЗ / ПКМ · клик по ФРЗ/ПКМ — смена схемы · V2.2
+    Вкладки ПРЗ / ФРЗ / ПКМ / Монтаж · клик по ФРЗ/ПКМ — смена схемы
     <div class="copyright">made by krylov.iav</div>
   </div>
 
@@ -318,6 +332,7 @@
       <label><input type="radio" name="scheme" value="default" checked> Обычная схема</label>
       <label><input type="radio" name="scheme" value="radio"> Радио</label>
       <label><input type="radio" name="scheme" value="vols"> Схема 2 ВОЛС</label>
+      <label id="schemeMontageLabel" hidden><input type="radio" name="scheme" value="montage"> Монтаж</label>
       <div class="modal-actions">
         <button class="btn secondary" id="schemeCancel">Отмена</button>
         <button class="btn" id="schemeSave">Применить</button>

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Монитор задач BPM (V2 фон)",
-  "version": "2.3.1",
+  "version": "2.4.22",
   "description": "Монитор ПРЗ/ФРЗ/ПКМ: Chrome, Edge, Яндекс. Safari — через конвертер.",
   "permissions": [
     "alarms",
@@ -24,7 +24,7 @@
         "https://workplace.ertelecom.ru/ProcessPortal/dashboards/*",
         "https://workplace.ertelecom.ru/*"
       ],
-      "js": ["content.js"],
+      "js": ["gridScrapeInject.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": true
     }
