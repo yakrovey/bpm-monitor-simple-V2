@@ -100,15 +100,15 @@ function getTaskType(title) {
   if (!/(прз|фрз|пкм)/.test(text)) return null;
 
   if (text.includes('пкм')) {
-    // «ПКМ: состояние НМУ КРУС» — отдельный шаг «Монтаж»
+    // «ПКМ: состояние НКУ КРУС» и «ПКМ: Подключение» → вкладка «Монтаж»
     if (
-      text.includes('нму крус') ||
       text.includes('нку крус') ||
+      text.includes('нму крус') ||
       (text.includes('состояние') && text.includes('крус'))
     ) {
-      return 'Монтаж: НМУ КРУС';
+      return 'Монтаж: НКУ КРУС';
     }
-    if (text.includes('подключен')) return 'ПКМ: Подключение';
+    if (text.includes('подключен')) return 'Монтаж: Подключение';
     return 'ПКМ: Координация';
   }
 
@@ -275,6 +275,15 @@ function sanitizeTaskFields(task) {
   let next = cleanDisplayFields(task);
   const title = String(next.title || '').trim();
   if (!title || !getTaskType(title)) return null;
+
+  // Призрак: id/экземпляр = метка СОС («ДРОП», «ВОЛС»…), а не заявка
+  const idTail = String(next.id || '')
+    .split('|')
+    .slice(1)
+    .join('|')
+    .trim();
+  if (looksLikeSchemeLabel(idTail)) return null;
+  if (looksLikeSchemeLabel(String(next.instanceName || '').trim())) return null;
 
   if (
     next.address &&

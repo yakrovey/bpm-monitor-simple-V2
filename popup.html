@@ -1,328 +1,548 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 480px;
-      padding: 16px;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f8f9fa;
-      color: #212529;
+    /* Палитра близка к актуальному UI Дом.ру / ЭР-Телеком */
+    :root {
+      --dom-red: #ff312c;
+      --dom-red-hover: #e02824;
+      --dom-red-soft: #ffe8e7;
+      --dom-red-mid: #ff7b7b;
+      --bpms-blue: #1565c0;
+      --bpms-blue-hover: #0d47a1;
+      --bpms-blue-soft: #e3f2fd;
+      --ink: #181b21;
+      --ink-2: #1e1f33;
+      --ink-soft: #3a3d4a;
+      --muted: #74767a;
+      --line: #d5dde3;
+      --line-strong: #b8c5ce;
+      --surface: #eff3f7;
+      --surface-2: #ffffff;
+      --surface-3: #e0ebf0;
+      --cool: #518399;
+      --ok-bg: #e6f4ea;
+      --ok-ink: #1e6b3a;
+      --err-bg: #ffe8e7;
+      --err-ink: #b42318;
+      --info-bg: #e8f1f6;
+      --info-ink: #2a5470;
+      --radius: 12px;
+      --radius-sm: 8px;
     }
-    .header {
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 440px;
+      padding: 0;
+      font-family: "Golos Text", "Segoe UI", sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--ink);
+      background: var(--surface);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .shell {
+      min-height: 100%;
+      padding: 0 0 10px;
+      background:
+        linear-gradient(180deg, #fff5f4 0%, transparent 120px),
+        linear-gradient(135deg, #ffffff 0%, var(--surface) 48%, #e8eef3 100%);
+    }
+
+    .brand-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
-      padding-bottom: 12px;
-      border-bottom: 2px solid #e9ecef;
+      gap: 10px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.88);
     }
-    .header h2 { font-size: 16px; }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      display: block;
+      object-fit: contain;
+    }
+
+    .brand-text { min-width: 0; }
+
+    .header h2,
+    .brand-title {
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      line-height: 1.2;
+    }
+
     .status {
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      background: #9e9e9e;
-      color: white;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      background: var(--muted);
+      color: #fff;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    .meta {
-      font-size: 11px;
-      color: #6c757d;
-      margin-bottom: 12px;
-      line-height: 1.5;
+
+    .content {
+      padding: 10px 14px 0;
     }
+
     .privacy {
       font-size: 11px;
-      background: #e8f5e9;
-      color: #2e7d32;
+      line-height: 1.45;
+      color: var(--ok-ink);
+      background: var(--ok-bg);
+      border: 1px solid #c7e2d0;
       padding: 8px 10px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-    .btn {
-      width: 100%;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      background: #1a73e8;
-      color: white;
+      border-radius: var(--radius-sm);
       margin-bottom: 8px;
     }
-    .btn:hover { background: #1557b0; }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .btn.secondary {
-      background: #eceff1;
-      color: #37474f;
+
+    .meta {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-bottom: 8px;
+      line-height: 1.55;
+      padding: 8px 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
     }
+
+    .meta strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .actions .btn-primary-wrap {
+      grid-column: 1 / -1;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--bpms-blue);
+      color: #fff;
+      box-shadow: none;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+
+    .btn:hover { background: var(--bpms-blue-hover); }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .btn.secondary {
+      background: var(--surface-2);
+      color: var(--ink-soft);
+      border-color: var(--line-strong);
+    }
+
+    .btn.secondary:hover {
+      background: var(--surface-3);
+      border-color: var(--cool);
+      color: var(--ink);
+    }
+
     .tabs {
       display: flex;
       flex-direction: column;
       gap: 6px;
       margin-bottom: 10px;
     }
+
     .tabs-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 6px;
     }
+
     .tab {
-      border: 1px solid #d0d7de;
-      background: #fff;
-      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      border-radius: var(--radius-sm);
       padding: 8px 6px;
       cursor: pointer;
       text-align: center;
+      font-family: inherit;
+      box-shadow: none;
+      transition: border-color 0.15s ease, background 0.15s ease;
     }
-    .tab-wide {
-      width: 100%;
+
+    .tab-wide { width: 100%; }
+
+    .tab:hover {
+      border-color: var(--line-strong);
+      background: #fff;
     }
-    .tab:hover { filter: brightness(0.98); }
+
     .tab.active {
-      border-color: #1a73e8;
-      box-shadow: 0 0 0 2px rgba(26,115,232,0.18);
+      border-color: var(--bpms-blue);
+      background: var(--bpms-blue-soft);
+      box-shadow: none;
     }
+
     .tab-name {
-      font-size: 13px;
-      font-weight: 700;
-      margin-bottom: 6px;
-      color: #1a1a1a;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      margin-bottom: 5px;
+      color: var(--ink);
     }
+
     .tab-stats {
       display: flex;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
       flex-wrap: wrap;
     }
+
     .pill {
-      min-width: 22px;
-      height: 20px;
+      min-width: 20px;
+      height: 18px;
       padding: 0 5px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 20px;
-      color: #111;
-      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 18px;
+      color: var(--ink);
+      border: 1px solid rgba(24, 27, 33, 0.08);
+      font-variant-numeric: tabular-nums;
     }
+
     .pill.green { background: #c8e6c9; }
     .pill.yellow { background: #fff59d; }
     .pill.red { background: #ef9a9a; }
     .pill.blue { background: #90caf9; }
     .pill.vols {
       background: #fff;
-      border-color: #bdbdbd;
+      border-color: #b0bec5;
     }
+
+    .pill.count-only {
+      background: var(--surface-3);
+      border-color: var(--line);
+      min-width: 28px;
+      padding: 0 7px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-soft);
+    }
+
     .history-section {
-      background: white;
-      border-radius: 10px;
-      padding: 12px;
-      max-height: 380px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px;
+      max-height: 360px;
       overflow-y: auto;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      margin: 0 14px;
     }
+
     .history-section h4 {
-      font-size: 13px;
-      color: #495057;
-      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 6px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      letter-spacing: 0.01em;
     }
+
     .tab-hint {
       font-size: 11px;
-      color: #6c757d;
+      color: var(--muted);
       margin-bottom: 8px;
+      line-height: 1.4;
     }
+
     .history-item {
-      padding: 10px;
-      border-bottom: 1px solid #f1f3f5;
+      padding: 9px 10px;
       font-size: 12px;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       margin-bottom: 6px;
-      border: 1px solid transparent;
-      color: #111;
+      border: 1px solid rgba(24, 27, 33, 0.06);
+      color: var(--ink);
       cursor: default;
     }
+
     .history-item.clickable { cursor: pointer; }
-    .history-item.clickable:hover { filter: brightness(0.97); }
+    .history-item.clickable:hover { filter: brightness(0.98); }
+
     .history-item .type {
-      font-weight: 600;
-      font-size: 11px;
-      padding: 2px 10px;
-      border-radius: 10px;
+      font-weight: 500;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      padding: 2px 7px;
+      border-radius: 5px;
       display: inline-block;
-      background: rgba(0,0,0,0.06);
+      background: rgba(24, 27, 33, 0.07);
     }
+
     .history-item .title {
-      margin-top: 4px;
-      font-size: 13px;
+      margin-top: 5px;
+      font-size: 12px;
       word-wrap: break-word;
-      line-height: 1.4;
-      font-weight: 600;
+      line-height: 1.35;
+      font-weight: 500;
     }
+
     .history-item .client,
     .history-item .date,
     .history-item .scheme {
       font-size: 11px;
       margin-top: 2px;
-      opacity: 0.9;
+      color: var(--ink-soft);
     }
+
     .timer-row {
-      margin-top: 6px;
+      margin-top: 7px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
       font-size: 12px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
       font-variant-numeric: tabular-nums;
-      font-weight: 700;
+      font-weight: 400;
     }
+
     .timer-row .pause {
+      font-family: "Golos Text", sans-serif;
       font-size: 10px;
-      font-weight: 600;
-      opacity: 0.85;
+      font-weight: 400;
+      color: var(--ink-soft);
+      text-align: right;
     }
+
     .count-badge {
-      background: #e9ecef;
-      padding: 2px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      color: #495057;
+      background: var(--surface-3);
+      border: 1px solid var(--line);
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-soft);
+      font-variant-numeric: tabular-nums;
     }
+
     .history-empty {
       text-align: center;
-      color: #adb5bd;
-      padding: 20px 0;
-      font-size: 13px;
-    }
-    .footer {
-      margin-top: 12px;
-      font-size: 10px;
-      color: #adb5bd;
-      text-align: center;
-      border-top: 1px solid #e9ecef;
-      padding-top: 10px;
-      line-height: 1.5;
-    }
-    .copyright {
-      margin-top: 4px;
-      font-size: 10px;
-      color: #90a4ae;
-    }
-    .error {
-      color: #c62828;
-      font-size: 11px;
-      margin-bottom: 10px;
-      word-break: break-word;
-    }
-    .check-result {
+      color: var(--muted);
+      padding: 22px 8px;
       font-size: 12px;
-      background: #e3f2fd;
-      color: #1565c0;
+    }
+
+    .footer {
+      margin: 10px 14px 0;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      line-height: 1.45;
+    }
+
+    .copyright {
+      margin-top: 3px;
+      font-size: 10px;
+      color: #8a9299;
+      letter-spacing: 0.02em;
+    }
+
+    .error {
+      color: var(--err-ink);
+      background: var(--err-bg);
+      border: 1px solid #ffc5c3;
+      font-size: 11px;
+      margin-bottom: 8px;
       padding: 8px 10px;
-      border-radius: 8px;
-      margin-bottom: 10px;
+      border-radius: var(--radius-sm);
+      word-break: break-word;
       line-height: 1.4;
     }
+
+    .check-result {
+      font-size: 11px;
+      background: var(--info-bg);
+      color: var(--info-ink);
+      border: 1px solid #c5d7e4;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.35);
+      background: rgba(24, 27, 33, 0.45);
       display: none;
       align-items: center;
       justify-content: center;
       z-index: 20;
-      padding: 16px;
+      padding: 14px;
+      backdrop-filter: blur(2px);
     }
+
     .modal-backdrop.open { display: flex; }
+
     .modal {
-      background: white;
-      border-radius: 12px;
-      padding: 16px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
       width: 100%;
-      max-width: 380px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      max-width: 360px;
     }
-    .modal h3 { font-size: 14px; margin-bottom: 8px; }
+
+    .modal h3 {
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+
     .modal p {
       font-size: 12px;
-      color: #546e7a;
-      margin-bottom: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      line-height: 1.4;
     }
+
     .modal label {
       display: block;
-      font-size: 13px;
+      font-size: 12px;
+      font-weight: 400;
       padding: 8px 10px;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      margin-bottom: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
       cursor: pointer;
+      background: var(--surface);
+      transition: border-color 0.12s ease, background 0.12s ease;
     }
-    .modal label:hover { background: #f5f5f5; }
+
+    .modal label:hover {
+      background: #fff;
+      border-color: var(--bpms-blue);
+    }
+
     .modal-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       margin-top: 8px;
     }
+
     .modal-actions .btn { margin: 0; }
+
+    .history-section::-webkit-scrollbar { width: 8px; }
+    .history-section::-webkit-scrollbar-thumb {
+      background: #c0cbd3;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h2>Монитор BPM V2</h2>
-    <span class="status" id="status">● Загрузка</span>
-  </div>
-
-  <div class="privacy">
-    Сбор статуса — всегда. Уведомления — только пн–пт 09:00–18:00. Таймер считает только рабочее время.
-  </div>
-
-  <div class="meta" id="meta">Статус: —</div>
-  <div class="check-result" id="checkResult" hidden></div>
-  <div class="error" id="error" hidden></div>
-
-  <button class="btn" id="checkBtn">Проверить сейчас</button>
-  <button class="btn secondary" id="openBtn">Открыть / показать вкладку BPM</button>
-  <button class="btn secondary" id="helpBtn">Инструкция</button>
-
-  <div class="tabs" id="stepTabs">
-    <div class="tabs-row">
-      <button type="button" class="tab active" data-tab="prz" id="tabPrz">
-        <div class="tab-name">ПРЗ</div>
-        <div class="tab-stats" id="statsPrz"></div>
-      </button>
-      <button type="button" class="tab" data-tab="frz" id="tabFrz">
-        <div class="tab-name">ФРЗ</div>
-        <div class="tab-stats" id="statsFrz"></div>
-      </button>
-      <button type="button" class="tab" data-tab="pkm" id="tabPkm">
-        <div class="tab-name">ПКМ</div>
-        <div class="tab-stats" id="statsPkm"></div>
-      </button>
+  <div class="shell">
+    <div class="brand-bar header">
+      <div class="brand-left">
+        <img class="brand-mark" src="domru-mark.png" width="32" height="32" alt="Дом.ru">
+        <div class="brand-text">
+          <h2 class="brand-title">Мониторинг BPMS</h2>
+        </div>
+      </div>
+      <span class="status" id="status">● Загрузка</span>
     </div>
-    <button type="button" class="tab tab-wide" data-tab="montage" id="tabMontage">
-      <div class="tab-name">Монтаж</div>
-      <div class="tab-stats" id="statsMontage"></div>
-    </button>
-  </div>
 
-  <div class="history-section" id="historyList">
-    <h4>
-      <span id="listTitle">ПРЗ</span>
-      <span class="count-badge" id="taskCount">0</span>
-    </h4>
-    <div class="tab-hint" id="tabHint">На вкладке ФРЗ и ПКМ можно сменить схему кликом по задаче. Монтаж — ПКМ: состояние НМУ КРУС.</div>
-    <div class="history-empty">Нет активных задач</div>
-  </div>
+    <div class="content">
+      <div class="privacy">
+        Сбор статуса — всегда. Уведомления — только пн–пт 09:00–18:00. Таймер считает только рабочее время.
+      </div>
 
-  <div class="footer">
-    Вкладки ПРЗ / ФРЗ / ПКМ / Монтаж · клик по ФРЗ/ПКМ — смена схемы
-    <div class="copyright">made by krylov.iav</div>
+      <div class="meta" id="meta">Статус: —</div>
+      <div class="check-result" id="checkResult" hidden></div>
+      <div class="error" id="error" hidden></div>
+
+      <div class="actions">
+        <div class="btn-primary-wrap">
+          <button class="btn" id="checkBtn">Проверить сейчас</button>
+        </div>
+        <button class="btn secondary" id="openBtn">Открыть BPM</button>
+        <button class="btn secondary" id="helpBtn">Инструкция</button>
+      </div>
+
+      <div class="tabs" id="stepTabs">
+        <div class="tabs-row">
+          <button type="button" class="tab active" data-tab="prz" id="tabPrz">
+            <div class="tab-name">ПРЗ</div>
+            <div class="tab-stats" id="statsPrz"></div>
+          </button>
+          <button type="button" class="tab" data-tab="frz" id="tabFrz">
+            <div class="tab-name">ФРЗ</div>
+            <div class="tab-stats" id="statsFrz"></div>
+          </button>
+          <button type="button" class="tab" data-tab="pkm" id="tabPkm">
+            <div class="tab-name">ПКМ</div>
+            <div class="tab-stats" id="statsPkm"></div>
+          </button>
+        </div>
+        <button type="button" class="tab tab-wide" data-tab="montage" id="tabMontage">
+          <div class="tab-name">Монтаж</div>
+          <div class="tab-stats" id="statsMontage"></div>
+        </button>
+      </div>
+    </div>
+
+    <div class="history-section" id="historyList">
+      <h4>
+        <span id="listTitle">ПРЗ</span>
+        <span class="count-badge" id="taskCount">0</span>
+      </h4>
+      <div class="tab-hint" id="tabHint">На вкладке ФРЗ и ПКМ можно сменить схему кликом по задаче. Монтаж — НКУ КРУС и ПКМ: Подключение.</div>
+      <div class="history-empty">Нет активных задач</div>
+    </div>
+
+    <div class="footer">
+      Вкладки ПРЗ / ФРЗ / ПКМ / Монтаж · клик по ФРЗ/ПКМ — смена схемы
+      <div class="copyright">made by krylov.iav · для холдинга Дом.ru</div>
+    </div>
   </div>
 
   <div class="modal-backdrop" id="schemeModal">

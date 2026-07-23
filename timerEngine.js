@@ -20,7 +20,17 @@ export const ZONE_COLORS = {
 
 export function getStepFamily(type) {
   if (!type) return null;
-  if (type.includes('Монтаж') || type.includes('НМУ КРУС')) return 'montage';
+  if (
+    type.includes('Монтаж') ||
+    type.includes('НКУ КРУС') ||
+    type.includes('НМУ КРУС')
+  ) {
+    return 'montage';
+  }
+  // Старые сохранённые «ПКМ: Подключение» до переклассификации
+  if (type.includes('ПКМ') && type.includes('Подключен')) {
+    return 'montage';
+  }
   if (type.includes('ПРЗ')) return 'prz';
   if (type.includes('ФРЗ')) return 'frz';
   if (type.includes('ПКМ')) return 'pkm';
@@ -34,7 +44,7 @@ export function supportsSchemeSwitch(type) {
 
 /**
  * СОС (схема подключения) со страницы → схема таймеров.
- * P2P/P2MP → radio; ВОЛС → vols; медный кабель → default (схема 1).
+ * P2P / P2MP / ДРОП → radio; ВОЛС → vols; медный кабель → default (схема 1).
  * null — распознать не удалось.
  */
 export function schemeFromSos(sosText) {
@@ -42,8 +52,9 @@ export function schemeFromSos(sosText) {
   if (!raw) return null;
   const t = raw.toLowerCase().replace(/\s+/g, ' ');
 
-  // Радио — по маркерам P2P / P2MP (даже если рядом есть «ВОЛС»)
+  // Радиосеть: P2P / P2MP / ДРОП (одна линейка таймеров)
   if (/\bp2mp\b|\bp2p\b|p2mp|p2p/i.test(raw)) return 'radio';
+  if (/\bдроп\b|\bdrop\b/i.test(t) || t.includes('дроп')) return 'radio';
 
   // ВОЛС
   if (
@@ -76,7 +87,9 @@ export function looksLikeSchemeLabel(text) {
   const raw = String(text || '').trim();
   if (!raw || raw.length > 80) return false;
   if (schemeFromSos(raw)) return true;
-  return /^(волс|медь|медный|copper|cu|radio|радио|p2p|p2mp)$/i.test(raw);
+  return /^(волс|медь|медный|copper|cu|radio|радио|p2p|p2mp|дроп|drop)$/i.test(
+    raw
+  );
 }
 
 function zoneByRanges(elapsed, ranges) {

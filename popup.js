@@ -136,7 +136,11 @@ function buildStats(history) {
   return stats;
 }
 
-function renderTabStats(el, s) {
+function renderTabStats(el, s, { countOnly = false } = {}) {
+  if (countOnly) {
+    el.innerHTML = `<span class="pill count-only" title="всего">${s.total}</span>`;
+    return;
+  }
   el.innerHTML = `
     <span class="pill green" title="зелёные">${s.green}</span>
     <span class="pill yellow" title="жёлтые">${s.yellow}</span>
@@ -194,7 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTabStats(document.getElementById('statsPrz'), stats.prz);
     renderTabStats(document.getElementById('statsFrz'), stats.frz);
     renderTabStats(document.getElementById('statsPkm'), stats.pkm);
-    renderTabStats(document.getElementById('statsMontage'), stats.montage);
+    renderTabStats(document.getElementById('statsMontage'), stats.montage, {
+      countOnly: true
+    });
 
     for (const btn of stepTabs.querySelectorAll('.tab')) {
       btn.classList.toggle('active', btn.dataset.tab === activeTab);
@@ -213,8 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
       activeTab === 'prz'
         ? 'Для ПРЗ схема одна — смена не требуется.'
         : activeTab === 'montage'
-          ? 'ПКМ: состояние НМУ КРУС. Таймер выключен (режим монтажа).'
-          : 'Схема берётся из колонки СОС (медь / ВОЛС / P2P·P2MP). Клик — ручная смена.';
+          ? 'НКУ КРУС и ПКМ: Подключение. Таймер выключен (режим монтажа).'
+          : 'Схема берётся из колонки СОС (медь / ВОЛС / P2P·P2MP·ДРОП). Клик — ручная смена.';
 
     if (!list.length) {
       historyList.innerHTML = `
@@ -309,19 +315,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       metaEl.innerHTML = `
         <div><strong>Последняя проверка:</strong> ${escapeHtml(formatTime(response.lastCheckAt))}</div>
-        <div><strong>Активных:</strong> ${escapeHtml(response.activeCount)} · <strong>известно:</strong> ${escapeHtml(response.knownCount)}</div>
-        <div><strong>Обновление списка:</strong> каждые ${escapeHtml(response.checkPeriodMinutes ?? 1)} мин (фон) · popup: ${escapeHtml(response.popupRefreshSec ?? 5)} с · таймер: ${escapeHtml(response.timerTickSec ?? 1)} с</div>
-        <div><strong>Сбор статуса:</strong> всегда · <strong>Уведомления:</strong> ${
-          response.notificationsEnabled
-            ? 'сейчас включены'
-            : 'на паузе (вне раб. времени)'
-        }</div>
+        <div><strong>Активных:</strong> ${escapeHtml(response.activeCount)}</div>
+        <div><strong>Обновление списка:</strong> каждые ${escapeHtml(response.checkPeriodMinutes ?? 1)} мин (фон)</div>
+        <div><strong>Сбор статуса:</strong> всегда</div>
         <div><strong>Рабочие часы:</strong> ${escapeHtml(response.workHours || 'пн–пт 09:00–18:00')}</div>
-        ${
-          response.lastCheckMessage
-            ? `<div><strong>Результат:</strong> ${escapeHtml(response.lastCheckMessage)}</div>`
-            : ''
-        }
       `;
 
       if (response.lastError) {

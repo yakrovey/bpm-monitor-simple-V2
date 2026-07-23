@@ -194,6 +194,7 @@
     if (!t || t.length > 100 || looksLikeDate(t)) return false;
     const low = t.toLowerCase().replace(/\s+/g, ' ');
     if (/\bp2mp\b|\bp2p\b|p2mp|p2p/i.test(t)) return true;
+    if (/\bдроп\b|\bdrop\b/i.test(low) || low.includes('дроп')) return true;
     if (
       low.includes('волс') ||
       low.includes('vols') ||
@@ -208,9 +209,13 @@
     ) {
       return true;
     }
-    // Короткое значение колонки СОС: «ВОЛС», «Медь» и т.п.
+    // Короткое значение колонки СОС: «ВОЛС», «Медь», «ДРОП» и т.п.
     if (t.length <= 40 && !t.includes('прз') && !t.includes('фрз') && !t.includes('пкм')) {
-      if (/^(волс|медь|медный|copper|cu|radio|радио)\b/i.test(t)) return true;
+      if (
+        /^(волс|медь|медный|copper|cu|radio|радио|дроп|drop)\b/i.test(t)
+      ) {
+        return true;
+      }
     }
     return false;
   }

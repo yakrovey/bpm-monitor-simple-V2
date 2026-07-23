@@ -72,11 +72,25 @@
         createdOffsetMin: 200
       }),
       makeTask({
-        title: 'ПКМ: Состояние НМУ КРУС',
+        title: 'ФРЗ: Финальный расчет затрат',
+        client: 'Невский 11',
+        address: 'Санкт-Петербург, Невский, 11',
+        sos: 'ДРОП',
+        createdOffsetMin: 180
+      }),
+      makeTask({
+        title: 'ПКМ: Состояние НКУ КРУС',
         client: 'ИП Монтаж',
         address: 'Санкт-Петербург, Садовая, 5',
         sos: 'Медный кабель',
         createdOffsetMin: 40
+      }),
+      makeTask({
+        title: 'ПКМ: Подключение',
+        client: 'Энгельса 113',
+        address: 'Санкт-Петербург, Энгельса, 113',
+        sos: 'Медный кабель',
+        createdOffsetMin: 55
       }),
       makeTask({
         title: 'Управление отложенной заявкой',
