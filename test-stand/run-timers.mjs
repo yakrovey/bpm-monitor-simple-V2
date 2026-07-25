@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   collectDueNotifications,
   evaluateTimer,
+  getStepFamily,
   reconcileNotifiedThresholds,
   resolveAppearedAtForTimer,
   schemeFromSos,
@@ -40,6 +41,17 @@ const results = [
   }),
   caseResult('SOS P2P → radio', () => {
     assert(schemeFromSos('P2P радио') === 'radio', 'expected radio');
+  }),
+  caseResult('SOS ДРОП → radio (same as P2P)', () => {
+    assert(schemeFromSos('ДРОП') === 'radio', 'expected radio for ДРОП');
+    assert(looksLikeSchemeLabel('ДРОП') === true, 'ДРОП is scheme label');
+    assert(looksLikeSchemeLabel('Невский 11') === false, 'address not scheme');
+  }),
+  caseResult('getStepFamily: Подключение and НКУ → montage', () => {
+    assert(getStepFamily('Монтаж: Подключение') === 'montage', 'Подключение');
+    assert(getStepFamily('Монтаж: НКУ КРУС') === 'montage', 'НКУ');
+    assert(getStepFamily('ПКМ: Подключение') === 'montage', 'legacy ПКМ Подключение');
+    assert(getStepFamily('ПКМ: Координация') === 'pkm', 'координация stays pkm');
   }),
   caseResult('looksLikeSchemeLabel rejects org names', () => {
     assert(looksLikeSchemeLabel('ООО ЛИГА') === false, 'org should not be scheme');

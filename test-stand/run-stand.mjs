@@ -79,8 +79,20 @@ async function main() {
           'deferred task should be skipped'
         );
         assert(
-          out.pagerTotal === 5,
-          `pagerTotal expected 5 (incl deferred on page), got ${out.pagerTotal}`
+          out.pagerTotal === 7,
+          `pagerTotal expected 7 (incl deferred on page), got ${out.pagerTotal}`
+        );
+        assert(
+          titles.some((t) => /подключен/i.test(t)),
+          'ПКМ: Подключение should be scraped'
+        );
+        assert(
+          out.tasks.some((t) => /дроп/i.test(t.sos || '')),
+          'ДРОП SOS should be on a FRZ task'
+        );
+        assert(
+          !out.tasks.some((t) => /дроп/i.test(t.client || '')),
+          'ДРОП must not become client'
         );
       })
     );

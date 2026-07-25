@@ -146,6 +146,11 @@
       grid-column: 1 / -1;
     }
 
+    .actions .btn-power-wrap,
+    .actions .btn-comments-wrap {
+      grid-column: 1 / -1;
+    }
+
     .btn {
       width: 100%;
       padding: 9px 10px;
@@ -164,6 +169,22 @@
     .btn:hover { background: var(--bpms-blue-hover); }
     .btn:active { transform: translateY(1px); }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .btn.power-on {
+      background: #67e300;
+      color: #143000;
+      border-color: #57c200;
+    }
+
+    .btn.power-on:hover { background: #5ad100; }
+
+    .btn.power-off {
+      background: #e40045;
+      color: #fff;
+      border-color: #c1003a;
+    }
+
+    .btn.power-off:hover { background: #c9003c; }
 
     .btn.secondary {
       background: var(--surface-2);
@@ -493,7 +514,7 @@
 
     <div class="content">
       <div class="privacy">
-        Сбор статуса — всегда. Уведомления — только пн–пт 09:00–18:00. Таймер считает только рабочее время.
+        Сбор статуса — по кнопке «Включено». Уведомления — отдельно, только пн–пт 09:00–18:00. Таймер считает только рабочее время.
       </div>
 
       <div class="meta" id="meta">Статус: —</div>
@@ -501,6 +522,12 @@
       <div class="error" id="error" hidden></div>
 
       <div class="actions">
+        <div class="btn-power-wrap">
+          <button type="button" class="btn power-on" id="powerBtn">Включено</button>
+        </div>
+        <div class="btn-comments-wrap">
+          <button type="button" class="btn secondary" id="commentsBtn">Выключить уведомления</button>
+        </div>
         <div class="btn-primary-wrap">
           <button class="btn" id="checkBtn">Проверить сейчас</button>
         </div>

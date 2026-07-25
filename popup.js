@@ -36,16 +36,19 @@ function formatTime(ts) {
   });
 }
 
-function statusLabel(monitorStatus) {
+function statusLabel(monitorStatus, monitoringEnabled = true) {
+  if (!monitoringEnabled || monitorStatus === 'off') {
+    return { text: '● Выкл', color: '#e40045' };
+  }
   switch (monitorStatus) {
     case 'monitoring':
     case 'tab-ready':
-      return { text: '● Активен', color: '#4caf50' };
+      return { text: '● Активен', color: '#67e300' };
     case 'opening-tab':
     case 'starting':
       return { text: '● Запуск', color: '#ff9800' };
     case 'error':
-      return { text: '● Ошибка', color: '#f44336' };
+      return { text: '● Ошибка', color: '#e40045' };
     default:
       return { text: '● Ожидание', color: '#9e9e9e' };
   }
@@ -137,16 +140,17 @@ function buildStats(history) {
 }
 
 function renderTabStats(el, s, { countOnly = false } = {}) {
+  const n = (v) => String(Number(v) || 0);
   if (countOnly) {
-    el.innerHTML = `<span class="pill count-only" title="всего">${s.total}</span>`;
+    el.innerHTML = `<span class="pill count-only" title="всего">${n(s.total)}</span>`;
     return;
   }
   el.innerHTML = `
-    <span class="pill green" title="зелёные">${s.green}</span>
-    <span class="pill yellow" title="жёлтые">${s.yellow}</span>
-    <span class="pill red" title="красные">${s.red}</span>
-    <span class="pill blue" title="синие (просрочка)">${s.blue}</span>
-    ${s.vols ? `<span class="pill vols" title="ВОЛС">${s.vols}</span>` : ''}
+    <span class="pill green" title="зелёные">${n(s.green)}</span>
+    <span class="pill yellow" title="жёлтые">${n(s.yellow)}</span>
+    <span class="pill red" title="красные">${n(s.red)}</span>
+    <span class="pill blue" title="синие (просрочка)">${n(s.blue)}</span>
+    ${s.vols ? `<span class="pill vols" title="ВОЛС">${n(s.vols)}</span>` : ''}
   `;
 }
 
@@ -160,8 +164,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const listTitle = document.getElementById('listTitle');
   const tabHint = document.getElementById('tabHint');
   const checkBtn = document.getElementById('checkBtn');
+  const powerBtn = document.getElementById('powerBtn');
+  const commentsBtn = document.getElementById('commentsBtn');
   const openBtn = document.getElementById('openBtn');
   const helpBtn = document.getElementById('helpBtn');
+  let monitoringEnabled = true;
+  let commentsEnabled = true;
   const schemeModal = document.getElementById('schemeModal');
   const schemeTaskTitle = document.getElementById('schemeTaskTitle');
   const schemeCancel = document.getElementById('schemeCancel');
@@ -301,15 +309,35 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTabButtons(buildStats(currentHistory));
   }
 
+  function syncPowerUi() {
+    if (!powerBtn) return;
+    powerBtn.classList.toggle('power-on', monitoringEnabled);
+    powerBtn.classList.toggle('power-off', !monitoringEnabled);
+    powerBtn.textContent = monitoringEnabled ? 'Включено' : 'Выключено';
+    checkBtn.disabled = !monitoringEnabled;
+  }
+
+  function syncCommentsUi() {
+    if (!commentsBtn) return;
+    commentsBtn.textContent = commentsEnabled
+      ? 'Выключить уведомления'
+      : 'Включить уведомления';
+  }
+
   function loadStatus() {
     ext.runtime.sendMessage({ action: 'getStatus' }, (response) => {
       if (ext.runtime.lastError || !response) {
         statusEl.textContent = '● Ошибка';
-        statusEl.style.background = '#f44336';
+        statusEl.style.background = '#e40045';
         return;
       }
 
-      const st = statusLabel(response.monitorStatus);
+      monitoringEnabled = response.monitoringEnabled !== false;
+      commentsEnabled = response.commentsEnabled !== false;
+      syncPowerUi();
+      syncCommentsUi();
+
+      const st = statusLabel(response.monitorStatus, monitoringEnabled);
       statusEl.textContent = st.text;
       statusEl.style.background = st.color;
 
@@ -317,7 +345,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <div><strong>Последняя проверка:</strong> ${escapeHtml(formatTime(response.lastCheckAt))}</div>
         <div><strong>Активных:</strong> ${escapeHtml(response.activeCount)}</div>
         <div><strong>Обновление списка:</strong> каждые ${escapeHtml(response.checkPeriodMinutes ?? 1)} мин (фон)</div>
-        <div><strong>Сбор статуса:</strong> всегда</div>
+        <div><strong>Сбор статуса:</strong> ${
+          monitoringEnabled ? 'включён' : 'выключен'
+        }</div>
+        <div><strong>Уведомления:</strong> ${
+          commentsEnabled ? 'включены' : 'выключены'
+        }</div>
         <div><strong>Рабочие часы:</strong> ${escapeHtml(response.workHours || 'пн–пт 09:00–18:00')}</div>
       `;
 
@@ -386,6 +419,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   checkBtn.addEventListener('click', () => {
+    if (!monitoringEnabled) {
+      showCheckResult('Мониторинг выключен. Включите его кнопкой сверху.', true);
+      return;
+    }
     const original = checkBtn.textContent;
     checkBtn.textContent = 'Проверка...';
     checkBtn.disabled = true;
@@ -395,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const err = ext.runtime.lastError;
       loadStatus();
       loadHistory();
-      checkBtn.disabled = false;
+      checkBtn.disabled = !monitoringEnabled;
 
       if (err) {
         checkBtn.textContent = 'Ошибка';
@@ -418,6 +455,31 @@ document.addEventListener('DOMContentLoaded', () => {
         checkBtn.textContent = original;
       }, 2000);
     });
+  });
+
+  powerBtn?.addEventListener('click', () => {
+    const next = !monitoringEnabled;
+    powerBtn.disabled = true;
+    ext.runtime.sendMessage(
+      { action: 'setMonitoringEnabled', enabled: next },
+      () => {
+        powerBtn.disabled = false;
+        loadStatus();
+        loadHistory();
+      }
+    );
+  });
+
+  commentsBtn?.addEventListener('click', () => {
+    const next = !commentsEnabled;
+    commentsBtn.disabled = true;
+    ext.runtime.sendMessage(
+      { action: 'setCommentsEnabled', enabled: next },
+      () => {
+        commentsBtn.disabled = false;
+        loadStatus();
+      }
+    );
   });
 
   openBtn.addEventListener('click', async () => {

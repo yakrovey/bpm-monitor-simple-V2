@@ -44,6 +44,10 @@ let lastCheckMessage = null;
 let monitorStatus = 'starting';
 let lastRunCheckAt = 0;
 let runCheckPromise = null;
+/** Главный тумблер расширения: сбор и таймеры. */
+let monitoringEnabled = true;
+/** Пользовательский тумблер системных уведомлений Chrome. */
+let commentsEnabled = true;
 
 async function loadState() {
   const data = await ext.storage.local.get([
@@ -53,7 +57,9 @@ async function loadState() {
     'lastCheckAt',
     'lastError',
     'lastCheckMessage',
-    'monitorStatus'
+    'monitorStatus',
+    'monitoringEnabled',
+    'commentsEnabled'
   ]);
 
   knownIds = new Set(data.knownIds || []);
@@ -63,6 +69,10 @@ async function loadState() {
   lastError = data.lastError || null;
   lastCheckMessage = data.lastCheckMessage || null;
   monitorStatus = data.monitorStatus || 'idle';
+  monitoringEnabled =
+    data.monitoringEnabled === undefined ? true : Boolean(data.monitoringEnabled);
+  commentsEnabled =
+    data.commentsEnabled === undefined ? true : Boolean(data.commentsEnabled);
   const beforeRepair = activeTasks.length;
   if (repairActiveTasks() || activeTasks.length !== beforeRepair) {
     await saveState();
@@ -78,6 +88,8 @@ async function saveState(extra = {}) {
     lastError,
     lastCheckMessage,
     monitorStatus,
+    monitoringEnabled,
+    commentsEnabled,
     ...extra
   });
 }
@@ -127,6 +139,7 @@ function getTaskType(title) {
 }
 
 function createNotification(title, message) {
+  if (!monitoringEnabled || !commentsEnabled) return;
   ext.notifications.create({
     type: 'basic',
     iconUrl: 'icon.png',
@@ -155,12 +168,17 @@ function enrichTaskView(task, now = Date.now()) {
 }
 
 function applyTimerNotifications(task, now = Date.now()) {
-  const allowNotify = isWorkTime(new Date(now));
+  const inWorkHours = isWorkTime(new Date(now));
+  // Пороги отмечаем даже без всплывающих уведомлений, чтобы не спамить при включении
+  const advanceThresholds = monitoringEnabled && inWorkHours;
+  const showNotifications = advanceThresholds && commentsEnabled;
   let next = reconcileNotifiedThresholds(cleanDisplayFields({ ...task }), now);
 
   // Отложенное «появилась задача», если пришла вне рабочего времени
-  if (next.pendingAppear && allowNotify) {
-    createNotification(next.pendingAppear.title, next.pendingAppear.message);
+  if (next.pendingAppear && advanceThresholds) {
+    if (showNotifications) {
+      createNotification(next.pendingAppear.title, next.pendingAppear.message);
+    }
     const notified = new Set(next.notified || []);
     notified.add(next.pendingAppear.key);
     next.notified = Array.from(notified);
@@ -175,11 +193,11 @@ function applyTimerNotifications(task, now = Date.now()) {
 
   // Статус/цвет/таймер — всегда; due непустой только в рабочее время
   const { due, timerPatch } = collectDueNotifications(next, timerState, now, {
-    allowNotify
+    allowNotify: advanceThresholds
   });
 
   for (const item of due) {
-    createNotification(item.title, item.message);
+    if (showNotifications) createNotification(item.title, item.message);
   }
 
   return {
@@ -581,7 +599,7 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
     monitorStatus = 'monitoring';
     lastCheckMessage = `Первый снимок: ${activeTasks.length} задач ПРЗ/ФРЗ/ПКМ (из ${tasks.length} строк)`;
     await saveState();
-    console.log(`🌱 Bootstrap: ${activeTasks.length} задач без уведомлений`);
+    console.debug(`🌱 Bootstrap: ${activeTasks.length} задач без уведомлений`);
     return {
       newCount: 0,
       total: activeTasks.length,
@@ -653,7 +671,7 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
     (skippedNoType ? `, прочих шагов: ${skippedNoType}` : '') +
     (isWorkTime(new Date(now)) ? '' : ' · уведомления на паузе (вне раб. времени)');
   await saveState();
-  console.log(`📊 ${lastCheckMessage}`);
+  console.debug(`📊 ${lastCheckMessage}`);
   return {
     newCount,
     total: activeTasks.length,
@@ -1161,6 +1179,17 @@ async function runCheckImpl(reason = 'alarm') {
   const now = Date.now();
   await loadState();
 
+  if (!monitoringEnabled) {
+    monitorStatus = 'off';
+    await saveState();
+    return {
+      ok: true,
+      skipped: true,
+      total: activeTasks.length,
+      message: 'Мониторинг выключен'
+    };
+  }
+
   if (
     reason !== 'manual' &&
     lastRunCheckAt &&
@@ -1178,7 +1207,7 @@ async function runCheckImpl(reason = 'alarm') {
   }
 
   lastRunCheckAt = now;
-  console.log(`🔍 Проверка (${reason})`);
+  console.debug(`🔍 Проверка (${reason})`);
   try {
     const { tasks, pagerTotal } = await requestTasksFromTab();
 
@@ -1275,16 +1304,32 @@ function ensureAlarm() {
   });
 }
 
+function clearAlarm() {
+  ext.alarms.clear(ALARM_NAME);
+}
+
 ext.runtime.onInstalled.addListener(async () => {
   await loadState();
-  ensureAlarm();
-  runCheck('install');
+  if (monitoringEnabled) {
+    ensureAlarm();
+    runCheck('install');
+  } else {
+    clearAlarm();
+    monitorStatus = 'off';
+    await saveState();
+  }
 });
 
 ext.runtime.onStartup.addListener(async () => {
   await loadState();
-  ensureAlarm();
-  runCheck('startup');
+  if (monitoringEnabled) {
+    ensureAlarm();
+    runCheck('startup');
+  } else {
+    clearAlarm();
+    monitorStatus = 'off';
+    await saveState();
+  }
 });
 
 ext.alarms.onAlarm.addListener((alarm) => {
@@ -1311,7 +1356,9 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getStatus') {
       sendResponse({
         status: 'ok',
-        monitorStatus,
+        monitorStatus: monitoringEnabled ? monitorStatus : 'off',
+        monitoringEnabled,
+        commentsEnabled,
         lastCheckAt,
         lastError,
         lastCheckMessage,
@@ -1321,11 +1368,48 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
         targetUrl: TARGET_URL,
         privacy: 'local-only',
         workHours: 'пн–пт 09:00–18:00',
-        notificationsEnabled: isWorkTime(),
-        collectingAlways: true,
+        notificationsEnabled:
+          monitoringEnabled && commentsEnabled && isWorkTime(),
+        collectingAlways: monitoringEnabled,
         checkPeriodMinutes: CHECK_PERIOD_MINUTES,
         popupRefreshSec: 5,
         timerTickSec: 1
+      });
+      return;
+    }
+
+    if (request.action === 'setMonitoringEnabled') {
+      monitoringEnabled = Boolean(request.enabled);
+      monitorStatus = monitoringEnabled ? 'monitoring' : 'off';
+      await saveState();
+      if (monitoringEnabled) {
+        ensureAlarm();
+        const result = await runCheck('enable');
+        sendResponse({
+          status: 'ok',
+          monitoringEnabled,
+          ...result
+        });
+      } else {
+        clearAlarm();
+        sendResponse({
+          status: 'ok',
+          monitoringEnabled,
+          message: 'Мониторинг выключен'
+        });
+      }
+      return;
+    }
+
+    if (request.action === 'setCommentsEnabled') {
+      commentsEnabled = Boolean(request.enabled);
+      await saveState();
+      sendResponse({
+        status: 'ok',
+        commentsEnabled,
+        message: commentsEnabled
+          ? 'Уведомления включены'
+          : 'Уведомления выключены'
       });
       return;
     }
@@ -1348,6 +1432,13 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'manualCheck') {
+      if (!monitoringEnabled) {
+        sendResponse({
+          ok: false,
+          message: 'Мониторинг выключен. Включите его кнопкой сверху.'
+        });
+        return;
+      }
       const result = await runCheck('manual');
       sendResponse(result);
       return;
@@ -1408,5 +1499,5 @@ ext.windows.onRemoved.addListener((windowId) => {
 
 loadState().then(() => {
   ensureAlarm();
-  console.log('✅ Background V2 + timers готов (local-only)');
+  console.debug('✅ Background V2 + timers готов (local-only)');
 });

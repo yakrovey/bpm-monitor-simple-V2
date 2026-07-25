@@ -15,7 +15,7 @@ ext.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
   collectTasksOnPage().then((result) => {
     const tasks = result.tasks || [];
-    console.log(`📤 V2: найдено задач в фрейме: ${tasks.length}`, location.href);
+    console.debug(`📤 V2: найдено задач в фрейме: ${tasks.length}`, location.href);
 
     ext.runtime.sendMessage(
       {
@@ -43,4 +43,4 @@ ext.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 // Список задач обновляет только background (alarm / «Проверить сейчас») — полный scrape
 // с merge вкладок. Прямой push из content давал неполные снимки и рассинхрон.
 
-console.log('✅ Content V2 готов:', location.href);
+console.debug('✅ Content V2 готов:', location.href);
