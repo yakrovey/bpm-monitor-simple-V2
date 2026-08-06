@@ -23,6 +23,18 @@ const TARGET_URL_PATTERN =
   'https://workplace.ertelecom.ru/ProcessPortal/dashboards/*';
 const ALARM_NAME = 'bpmCheck';
 const CHECK_PERIOD_MINUTES = 1;
+
+/**
+ * Эвристики неполного снимка виртуального грида BPM (~25 строк по умолчанию).
+ * Нужны, чтобы partial scrape не затирал живой список (призраки / откат дат).
+ */
+const PARTIAL_SCRAPE_CONFIG = {
+  trackedDropIgnoreBelow: 2,
+  pagerExplainedSlack: 2,
+  virtualGridIncomingMax: 30,
+  virtualGridTrackedDropMin: 8,
+  severeDropRatio: 0.7
+};
 /** Минимальный интервал между фоновыми проверками (защита от дублей). */
 const MIN_CHECK_INTERVAL_MS = 45 * 1000;
 const MONITOR_TAB_STORAGE_KEY = 'monitorTabId';
@@ -536,7 +548,7 @@ function createTrackedTask(incoming, now, { notifyAppear }) {
     }
   }
 
-  // Дальше только новые пороги (в т.ч. переход в синий → «ВСЁ РАССЛАБЬСЯ…»)
+  // Дальше только новые пороги (в т.ч. переход в синий → «заявка просрочена»)
   return applyTimerNotifications(task, now);
 }
 
@@ -551,17 +563,24 @@ function looksLikePartialScrape(
   // Неполный снимок = подозрительно пропало много УЖЕ отслеживаемых задач.
   // Сам по себе pager (с «отложено» и чужими шагами) не повод сохранять stale.
   const trackedDrop = prevCount - incomingCount;
-  if (trackedDrop <= 2) return false;
+  if (trackedDrop <= PARTIAL_SCRAPE_CONFIG.trackedDropIgnoreBelow) return false;
 
   if (pagerTotal && incomingCount < pagerTotal) {
     const pagerGap = pagerTotal - incomingCount;
     const explainedGap = Math.max(0, Number(excludedCount) || 0);
-    if (pagerGap <= explainedGap + 2) return false;
+    if (pagerGap <= explainedGap + PARTIAL_SCRAPE_CONFIG.pagerExplainedSlack) {
+      return false;
+    }
   }
 
   // Типичный сбой виртуального грида (~25 строк) при большем списке
-  if (incomingCount <= 30 && trackedDrop > 8) return true;
-  return incomingCount < prevCount * 0.7;
+  if (
+    incomingCount <= PARTIAL_SCRAPE_CONFIG.virtualGridIncomingMax &&
+    trackedDrop > PARTIAL_SCRAPE_CONFIG.virtualGridTrackedDropMin
+  ) {
+    return true;
+  }
+  return incomingCount < prevCount * PARTIAL_SCRAPE_CONFIG.severeDropRatio;
 }
 
 function extractProcessKey(instanceName) {

@@ -171,7 +171,7 @@ export function getSchemeConfig(family, scheme) {
         intervalAfterMid: 2 * 60 * 1000
       },
       overdueAfter: hours(9),
-      overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
+      overdueText: 'заявка просрочена'
     };
   }
 
@@ -204,7 +204,7 @@ export function getSchemeConfig(family, scheme) {
         intervalAfterMid: 2 * 60 * 1000
       },
       overdueAfter: hoursMinutes(26, 59),
-      overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
+      overdueText: 'заявка просрочена'
     };
   }
 
@@ -238,7 +238,7 @@ export function getSchemeConfig(family, scheme) {
         intervalAfterMid: 2 * 60 * 1000
       },
       overdueAfter: hoursMinutes(15, 59),
-      overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
+      overdueText: 'заявка просрочена'
     };
   }
 
@@ -271,7 +271,7 @@ export function getSchemeConfig(family, scheme) {
         intervalAfterMid: 2 * 60 * 1000
       },
       overdueAfter: hoursMinutes(13, 59),
-      overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
+      overdueText: 'заявка просрочена'
     };
   }
 
@@ -303,7 +303,7 @@ export function getSchemeConfig(family, scheme) {
       ],
       danger: null,
       overdueAfter: hours(4),
-      overdueText: 'ВСЁ РАССЛАБЬСЯ, ТЫ ПРОСРОЧИЛ ЭТУ ЗАЯВКУ'
+      overdueText: 'заявка просрочена'
     };
   }
 

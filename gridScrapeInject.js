@@ -3,6 +3,20 @@
  * globalThis.__bpmCollectTasks() → { tasks, pagerTotal, hidden }
  */
 (function () {
+  /**
+   * Тайминги и шаги скролла виртуального грида BPM.
+   * Фоновая вкладка (document.hidden) — длиннее паузы: рендер реже.
+   * Менять только осознанно: от этих значений зависит полнота scrape.
+   */
+  const SCRAPE_CONFIG = {
+    stepDelayMs: { hidden: 320, visible: 150 },
+    settleDelayMs: { hidden: 420, visible: 180 },
+    scrollStepRatio: { hidden: 0.55, visible: 0.72 },
+    minScrollStepPx: 48,
+    idleRoundsLimit: 4,
+    scrollEpsilonPx: 8
+  };
+
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -1027,18 +1041,22 @@
 
   async function collectGridTasks() {
     const hidden = document.hidden;
-    const stepDelay = hidden ? 320 : 150;
-    const settleDelay = hidden ? 420 : 180;
+    const mode = hidden ? 'hidden' : 'visible';
+    const stepDelay = SCRAPE_CONFIG.stepDelayMs[mode];
+    const settleDelay = SCRAPE_CONFIG.settleDelayMs[mode];
     const seen = new Map();
     const viewport = findGridScrollTarget();
     await scanWithHorizontalReveal(seen);
 
-    if (viewport && viewport.scrollHeight > viewport.clientHeight + 8) {
+    if (
+      viewport &&
+      viewport.scrollHeight > viewport.clientHeight + SCRAPE_CONFIG.scrollEpsilonPx
+    ) {
       const savedTop = viewport.scrollTop;
       const expected = readExpectedRowCount();
       const step = Math.max(
-        48,
-        Math.floor(viewport.clientHeight * (hidden ? 0.55 : 0.72))
+        SCRAPE_CONFIG.minScrollStepPx,
+        Math.floor(viewport.clientHeight * SCRAPE_CONFIG.scrollStepRatio[mode])
       );
       let idleRounds = 0;
 
@@ -1047,7 +1065,7 @@
       await sleep(settleDelay);
       await scanWithHorizontalReveal(seen);
 
-      while (idleRounds < 4) {
+      while (idleRounds < SCRAPE_CONFIG.idleRoundsLimit) {
         const prevCount = seen.size;
         viewport.scrollTop = Math.min(
           viewport.scrollTop + step,
