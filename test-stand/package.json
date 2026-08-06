@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "stand": "node run-stand.mjs",
+    "live": "node run-live.mjs",
     "server": "node server.mjs",
     "timers": "node run-timers.mjs"
   },

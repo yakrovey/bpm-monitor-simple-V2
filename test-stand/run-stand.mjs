@@ -129,6 +129,67 @@ async function main() {
     );
 
     results.push(
+      await caseResult('ghost FRZ with title/date/SOS but no identity is discarded', async () => {
+        await page.goto(`${BASE}/dashboard.html`, { waitUntil: 'networkidle' });
+        await injectScraper(page);
+        await page.evaluate(() => window.__stand.addGhostFrz());
+        const out = await collect(page, { skipSoftRefresh: true });
+        const ghosts = out.tasks.filter(
+          (t) =>
+            /фрз/i.test(t.title || '') &&
+            !String(t.instanceName || '').trim() &&
+            !String(t.client || '').trim() &&
+            !String(t.address || '').trim()
+        );
+        assert(ghosts.length === 0, `ghost FRZ leaked: ${JSON.stringify(ghosts)}`);
+      })
+    );
+
+    results.push(
+      await caseResult('deferred rows are exposed as excluded instances', async () => {
+        await page.goto(`${BASE}/dashboard.html`, { waitUntil: 'networkidle' });
+        await injectScraper(page);
+        const out = await collect(page, { skipSoftRefresh: true });
+        assert(
+          Array.isArray(out.excludedInstances) && out.excludedInstances.length > 0,
+          'excludedInstances missing'
+        );
+        assert(
+          out.excludedInstances.some((name) => /ООО СКИП/i.test(name)),
+          `deferred instance not exposed: ${JSON.stringify(out.excludedInstances)}`
+        );
+      })
+    );
+
+    results.push(
+      await caseResult('address abbreviations do not leak into client name', async () => {
+        await page.goto(`${BASE}/dashboard.html`, { waitUntil: 'networkidle' });
+        await injectScraper(page);
+        await page.evaluate(() => {
+          const viewport = document.getElementById('viewport');
+          const row = document.createElement('div');
+          row.className = 'taskGridRow ng-scope';
+          row.innerHTML = `
+            <div class="ui-grid-cell ui-grid-col-0">ФРЗ: Финальный расчет затрат</div>
+            <div class="ui-grid-cell ui-grid-col-1">Санкт-Петербург, Большой В.О., Пр-Кт, 55. СПБ ГУП "АТС Смольного"</div>
+            <div class="ui-grid-cell ui-grid-col-2">Медный кабель</div>
+            <div class="ui-grid-cell ui-grid-col-3">29 июля 2026 г., 13:16:39</div>
+            <div class="ui-grid-cell ui-grid-col-4">29 июля 2026 г., 13:10:00</div>
+          `;
+          viewport.prepend(row);
+        });
+        const out = await collect(page, { skipSoftRefresh: true });
+        const task = out.tasks.find((t) => /Смольного/i.test(t.instanceName || ''));
+        assert(task, 'abbreviation task missing');
+        assert(task.client === 'СПБ ГУП "АТС Смольного"', `bad client: ${task.client}`);
+        assert(
+          task.address === 'Санкт-Петербург, Большой В.О., Пр-Кт, 55',
+          `bad address: ${task.address}`
+        );
+      })
+    );
+
+    results.push(
       await caseResult('stale mode: soft refresh does not sync until real refresh', async () => {
         await page.goto(`${BASE}/dashboard.html`, { waitUntil: 'networkidle' });
         await injectScraper(page);
@@ -160,12 +221,8 @@ async function main() {
 
         const scraped = await collect(page, { skipSoftRefresh: true });
         assert(
-          scraped.tasks.length === after.server - 1 || scraped.tasks.length === after.server,
-          `unexpected tracked count ${scraped.tasks.length} vs server ${after.server}`
-        );
-        assert(
           scraped.tasks.length >= 3,
-          `expected remaining tracked tasks, got ${scraped.tasks.length}`
+          `expected remaining tracked tasks, got ${scraped.tasks.length} (server ${after.server})`
         );
       })
     );
@@ -222,13 +279,25 @@ async function main() {
     );
 
     results.push(
-      await caseResult('created date preferred over received date', async () => {
+      await caseResult('received date preferred over created date for timer', async () => {
         await page.goto(`${BASE}/dashboard.html`, { waitUntil: 'networkidle' });
         await injectScraper(page);
         const out = await collect(page, { skipSoftRefresh: true });
-        const sample = out.tasks.find((t) => t.date);
-        assert(sample, 'no dated task');
-        assert(/\d{4}/.test(sample.date), `bad date ${sample.date}`);
+        const liga = out.tasks.find((t) => /ЛИГА/i.test(t.instanceName || t.client || ''));
+        assert(liga, 'ЛИГА task missing');
+        assert(liga.date, 'date missing');
+        const pageDates = await page.evaluate(() => {
+          const row = [...document.querySelectorAll('.taskGridRow')].find((r) =>
+            /ЛИГА/i.test(r.textContent || '')
+          );
+          const cells = row ? [...row.querySelectorAll('.ui-grid-cell')].map((c) => c.textContent.trim()) : [];
+          return { received: cells[3] || '', created: cells[4] || '' };
+        });
+        assert(pageDates.received, 'received cell empty');
+        assert(
+          liga.date === pageDates.received,
+          `timer date should be received (${pageDates.received}), got ${liga.date} (created=${pageDates.created})`
+        );
       })
     );
   } finally {

@@ -36,6 +36,13 @@ export function createServer() {
     }
 
     if (pathname === '/') pathname = '/dashboard.html';
+    // Путь как на боевом BPM — для E2E с загруженным расширением
+    if (pathname === '/ProcessPortal/dashboards/SYSRP/13202') {
+      pathname = '/dashboard.html';
+    }
+    if (pathname === '/ProcessPortal/dashboards/dashboard.js') {
+      pathname = '/dashboard.js';
+    }
     const file = path.normalize(path.join(ROOT, pathname));
     if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       return send(res, 404, 'not found');
