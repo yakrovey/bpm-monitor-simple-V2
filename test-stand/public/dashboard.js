@@ -35,6 +35,7 @@
   function makeTask({ title, client, address, sos, createdOffsetMin }) {
     const id = `T${seq++}`;
     const createdAt = Date.now() - (createdOffsetMin || 30) * 60 * 1000;
+    const receivedAt = createdAt + 60 * 1000;
     const instanceName = `Подключение «${client}» по ТЭО. ${address}`;
     return {
       id,
@@ -44,7 +45,7 @@
       address,
       sos: sos || '',
       createdAt,
-      receivedAt: createdAt + 60 * 1000
+      receivedAt
     };
   }
 
@@ -146,6 +147,22 @@
     return true;
   }
 
+  function addGhostFrz() {
+    // Клон-пустышка: title + дата + СОС, но без экземпляра/клиента/адреса
+    pageTasks.push({
+      id: `T${seq++}`,
+      title: 'ФРЗ: Финальный расчет затрат',
+      instanceName: '',
+      client: '',
+      address: '',
+      sos: 'ВОЛС',
+      createdAt: Date.now() - 60 * 60 * 1000,
+      receivedAt: Date.now() - 50 * 60 * 1000
+    });
+    render();
+    log('Ghost FRZ (title+date+SOS, no identity) added to page only');
+  }
+
   // Minimal Angular-like surface for soft-refresh probes
   window.angular = {
     element(el) {
@@ -234,15 +251,25 @@
   });
 
   document.getElementById('btnCompleteOldest').addEventListener('click', () => {
-    if (!serverTasks.length) return;
-    const done = serverTasks.pop();
+    completeTracked();
+  });
+
+  function completeTracked() {
+    let idx = -1;
+    for (let i = serverTasks.length - 1; i >= 0; i -= 1) {
+      if (/отложен/i.test(serverTasks[i].title || '')) continue;
+      idx = i;
+      break;
+    }
+    if (idx < 0) return;
+    const done = serverTasks.splice(idx, 1)[0];
     log(`Отработана на сервере: ${done.client}`);
     if (!staleMode) softRefreshFromServer();
     else {
       render();
       log('Страница всё ещё показывает отработанную (stale)');
     }
-  });
+  }
 
   document.getElementById('btnCorruptSos').addEventListener('click', () => {
     // Имитация бага смещения колонок: в instanceName кладём только СОС
@@ -282,8 +309,10 @@
     completeOldest: () => {
       document.getElementById('btnCompleteOldest').click();
     },
+    completeTracked,
     addPrz: () => document.getElementById('btnAddPrz').click(),
-    corruptSos: () => document.getElementById('btnCorruptSos').click()
+    corruptSos: () => document.getElementById('btnCorruptSos').click(),
+    addGhostFrz
   };
 
   seed();
