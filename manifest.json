@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Монитор задач BPM (V2 фон)",
-  "version": "2.4.30",
+  "version": "2.4.46",
   "description": "Монитор ПРЗ/ФРЗ/ПКМ для workplace BPM (Дом.ru / ЭР-Телеком). Chrome, Edge, Яндекс.",
   "permissions": [
     "alarms",

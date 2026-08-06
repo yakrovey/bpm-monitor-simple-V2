@@ -141,5 +141,11 @@ export function parseRussianDateTime(dateStr) {
     ).getTime();
   }
 
+  // BPM model: 2026-07-29T10:18:45Z
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(clean)) {
+    const ts = Date.parse(clean);
+    if (Number.isFinite(ts)) return ts;
+  }
+
   return null;
 }

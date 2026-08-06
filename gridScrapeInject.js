@@ -24,15 +24,24 @@
       .replace(/\s+(RIAS|KRUS)-[\w.-]+\s*$/i, '')
       .trim();
 
+    const orgRe =
+      /(ООО|ОАО|АО|ПАО|ЗАО|ИП|ГУП|МУП|ФГУП|ГБУ|ГКУ|СПБ\s+ГУП|Общество с ограниченной|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
+    const addressRe =
+      /(Санкт-Петербург|Ленинград|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|, \d)/i;
+
+    const orgMatch = cleaned.match(orgRe);
+    if (orgMatch && typeof orgMatch.index === 'number' && orgMatch.index > 0) {
+      const orgIndex = orgMatch.index;
+      return {
+        client: cleaned.slice(orgIndex).replace(/^[,.\s]+/, '').replace(/\.+$/, '').trim(),
+        address: cleaned.slice(0, orgIndex).replace(/[,.\s]+$/, '').trim()
+      };
+    }
+
     const parts = cleaned
       .split(/\.\s+/)
       .map((p) => p.trim())
       .filter(Boolean);
-
-    const orgRe =
-      /(ООО|ОАО|АО|ПАО|ЗАО|ИП|Общество с ограниченной|АКЦИОНЕРН|ПУБЛИЧН|ГОСУДАРСТВЕНН)/i;
-    const addressRe =
-      /(Санкт-Петербург|Ленинград|ул\.|улица|пр-кт|проспект|ш\.|шоссе|пер\.|наб\.|, \d)/i;
 
     let client = '';
     let address = '';
@@ -131,6 +140,59 @@
     }
 
     return null;
+  }
+
+  function formatRuFromTs(ts) {
+    if (!Number.isFinite(ts)) return '';
+    const d = new Date(ts);
+    const months = [
+      'янв',
+      'фев',
+      'мар',
+      'апр',
+      'мая',
+      'июн',
+      'июл',
+      'авг',
+      'сен',
+      'окт',
+      'ноя',
+      'дек'
+    ];
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getDate()} ${months[d.getMonth()]}. ${d.getFullYear()} г., ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function isExcludedTitle(title) {
+    const low = String(title || '').toLowerCase();
+    return low.includes('отложен') || low.includes('управление отложен');
+  }
+
+  function isTerminalStatus(status) {
+    const low = String(status || '').toLowerCase();
+    return (
+      low.includes('отложен') ||
+      low.includes('завершен') ||
+      low.includes('закрыт') ||
+      low.includes('выполнен') ||
+      low.includes('отказ')
+    );
+  }
+
+  function extractProcessKey(instanceName) {
+    const text = String(instanceName || '');
+    const rias = text.match(/\b((?:RIAS|KRUS)-[A-Za-z0-9.-]+)\b/i);
+    if (rias) return rias[1].toUpperCase();
+    const bracket = text.match(/\[(\d+)\]\s*$/);
+    if (bracket) return `PI:${bracket[1]}`;
+    return '';
+  }
+
+  function buildStableTaskId(title, instanceName) {
+    const t = String(title || '').trim();
+    const proc = extractProcessKey(instanceName);
+    if (t && proc) return `${t}|${proc}`;
+    return `${t}|${String(instanceName || '').trim()}`;
   }
 
   function extractDateFromText(text) {
@@ -233,7 +295,9 @@
     const t = (text || '').toLowerCase().replace(/\s+/g, ' ');
     return (
       t.includes('дата получения') ||
-      t.includes('получения задачи')
+      t.includes('дата получения заявки') ||
+      t.includes('получения задачи') ||
+      t.includes('получения заявки')
     );
   }
 
@@ -419,7 +483,10 @@
     }
 
     // Эвристика: даты и СОС по содержимому ячеек
-    if (!dateStr || !sos) {
+    // Важно: даже если "дата создания" уже распознана, "дата получения" может
+    // не попасть в receivedStr из‑за несостыковки заголовков — тогда нужно
+    // достать обе даты из содержимого.
+    if (!dateStr || !receivedStr || !sos) {
       const dateByIndex = [];
       for (let i = 0; i < texts.length; i++) {
         if (looksLikeDate(texts[i]) && parsePageDate(texts[i]) != null) {
@@ -429,15 +496,17 @@
           sos = texts[i];
         }
       }
-      // «Дата создания экземпляра» обычно последняя колонка-дата
+      // Обычно: первая дата = получение, последняя дата = создание.
+      if (!receivedStr && dateByIndex.length) {
+        receivedStr = dateByIndex[0].text;
+      }
       if (!dateStr && dateByIndex.length) {
         dateStr = dateByIndex[dateByIndex.length - 1].text;
       }
     }
 
-    if (!dateStr && receivedStr) dateStr = receivedStr;
-
-    return { title, instanceName, dateStr, sos };
+    const timerDate = receivedStr || dateStr || '';
+    return { title, instanceName, dateStr: timerDate, sos };
   }
 
   function isTargetTitle(title) {
@@ -551,18 +620,16 @@
 
     if (!isTargetTitle(title)) return null;
 
-    const titleLower = title.toLowerCase();
-    if (
-      titleLower.includes('отложен') ||
-      titleLower.includes('управление отложен')
-    ) {
-      return null;
-    }
+    if (isExcludedTitle(title)) return null;
 
     const appearedAt = parsePageDate(dateStr);
     const { client, address } = parseInstanceName(instanceName);
     const safeClient = looksLikeSosValue(client) ? '' : client;
-    const key = (title + '|' + instanceName).substring(0, 160);
+    const instanceTrim = String(instanceName || '').trim();
+    // Без экземпляра получается id «title|» и пустой клон существующей заявки
+    if (!instanceTrim || looksLikeSosValue(instanceTrim)) return null;
+    if (!safeClient && !String(address || '').trim() && !instanceTrim) return null;
+    const key = buildStableTaskId(title, instanceTrim);
     if (title.length <= 3) return null;
 
     return {
@@ -570,7 +637,7 @@
       title,
       client: safeClient,
       address,
-      instanceName,
+      instanceName: instanceTrim,
       status: '',
       priority: '',
       sos: sos || '',
@@ -654,13 +721,7 @@
     }
     if (!isTargetTitle(title)) return null;
 
-    const titleLower = title.toLowerCase();
-    if (
-      titleLower.includes('отложен') ||
-      titleLower.includes('управление отложен')
-    ) {
-      return null;
-    }
+    if (isExcludedTitle(title)) return null;
 
     const instanceName = pickField(row, [
       'instanceName',
@@ -675,7 +736,9 @@
       'status',
       'taskStatus',
       'TASK_STATUS',
+      'STATUS',
       'state',
+      'STATE',
       'statusName'
     ]);
     const priority = pickField(row, ['priority', 'priorityName']);
@@ -694,37 +757,48 @@
       'technology',
       'TECHNOLOGY',
       'sosName',
-      'sosValue'
+      'sosValue',
+      'BD_С_О_С'
     ]);
 
-    const statusLower = status.toLowerCase();
-    if (
-      statusLower.includes('отложен') ||
-      statusLower.includes('завершен') ||
-      statusLower.includes('закрыт') ||
-      statusLower.includes('выполнен') ||
-      statusLower.includes('отказ')
-    ) {
-      return null;
-    }
+    if (isTerminalStatus(status)) return null;
 
     const { client, address } = parseInstanceName(instanceName);
     const safeClient = looksLikeSosValue(client) ? '' : client;
-    const key = (title + '|' + instanceName).substring(0, 160);
+    const instanceTrim = String(instanceName || '').trim();
+    if (!instanceTrim || looksLikeSosValue(instanceTrim)) return null;
+    const key = buildStableTaskId(title, instanceTrim);
+
+    // ACTIVATED = «Дата получения задачи» в BPM
+    const activatedRaw = pickField(row, [
+      'ACTIVATED',
+      'activated',
+      'activatedDate',
+      'taskActivated'
+    ]);
+    let appearedAt = null;
+    let date = '';
+    if (activatedRaw) {
+      const ts = Date.parse(activatedRaw);
+      if (Number.isFinite(ts)) {
+        appearedAt = ts;
+        date = formatRuFromTs(ts);
+      }
+    }
 
     return {
       id: key,
       title,
       client: safeClient,
       address,
-      instanceName,
+      instanceName: instanceTrim,
       status,
       priority,
       sos,
-      date: '',
-      appearedAt: null,
-      dateSource: 'model',
-      fullText: [title, instanceName, status, sos].join(' ')
+      date,
+      appearedAt,
+      dateSource: date ? 'model' : 'model',
+      fullText: [title, instanceTrim, status, sos, date].join(' ')
     };
   }
 
@@ -739,6 +813,59 @@
         added += 1;
       } else {
         seen.set(task.id, mergeTaskRecords(seen.get(task.id), task));
+      }
+    }
+    return added;
+  }
+
+  function absorbExcludedInstanceNames(arr, seen) {
+    if (!Array.isArray(arr) || arr.length < 1 || arr.length > 500) return 0;
+    let added = 0;
+    for (const item of arr) {
+      const row = item?.entity || item;
+      if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+
+      let title = pickField(row, [
+        'taskSubject',
+        'task_subject',
+        'TAD_DISPLAY_NAME',
+        'subject',
+        'title',
+        'stepName',
+        'name',
+        'displayName',
+        'taskName'
+      ]);
+      if (!title) {
+        const strings = [];
+        flattenStrings(row, strings, 0);
+        title = strings.find((s) => s.length > 5) || '';
+      }
+
+      const status = pickField(row, [
+        'status',
+        'taskStatus',
+        'TASK_STATUS',
+        'STATUS',
+        'state',
+        'STATE',
+        'statusName'
+      ]);
+      if (!isExcludedTitle(title) && !isTerminalStatus(status)) continue;
+
+      const instanceName = pickField(row, [
+        'instanceName',
+        'instance_name',
+        'PI_NAME',
+        'processInstanceName',
+        'instance',
+        'piName',
+        'processSubject'
+      ]).trim();
+      if (!instanceName || looksLikeSosValue(instanceName)) continue;
+      if (!seen.has(instanceName)) {
+        seen.add(instanceName);
+        added += 1;
       }
     }
     return added;
@@ -775,6 +902,49 @@
               for (const key of Object.keys(scope)) {
                 if (key.startsWith('$')) continue;
                 absorbTaskArray(scope[key], seen);
+              }
+              scope = scope.$parent;
+            }
+          });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+
+    return Array.from(seen.values());
+  }
+
+  function collectExcludedInstancesFromGridModel() {
+    const seen = new Set();
+
+    try {
+      if (typeof angular !== 'undefined') {
+        document
+          .querySelectorAll('.ui-grid, [ui-grid], [class*="ui-grid"], .taskGrid')
+          .forEach((el) => {
+            let scope = angular.element(el).scope();
+            for (let depth = 0; depth < 22 && scope; depth += 1) {
+              absorbExcludedInstanceNames(scope.gridOptions?.data, seen);
+              absorbExcludedInstanceNames(
+                scope.gridApi?.grid?.rows?.map((r) => r.entity),
+                seen
+              );
+              absorbExcludedInstanceNames(scope.taskList, seen);
+              absorbExcludedInstanceNames(scope.tasks, seen);
+              absorbExcludedInstanceNames(scope.rows, seen);
+              absorbExcludedInstanceNames(scope.data, seen);
+              scope = scope.$parent;
+            }
+          });
+
+        document
+          .querySelectorAll('[ng-controller], [data-ng-controller], .ng-scope')
+          .forEach((el) => {
+            let scope = angular.element(el).scope();
+            for (let depth = 0; depth < 18 && scope; depth += 1) {
+              for (const key of Object.keys(scope)) {
+                if (key.startsWith('$')) continue;
+                absorbExcludedInstanceNames(scope[key], seen);
               }
               scope = scope.$parent;
             }
@@ -1262,37 +1432,63 @@
 
     // Soft-refresh только если страница скрыта или явно запрошен force
     // (активный дашборд пользователя не дёргаем — конфликт с работой в BPM)
-    let soft = { skipped: true, clicked: 0, called: 0, waitMs: 0 };
-    const wantSoft =
-      options.forceSoftRefresh === true ||
-      (options.skipSoftRefresh !== true && document.hidden);
-    if (wantSoft) {
-      soft = await softRefreshDashboard(Boolean(options.forceSoftRefresh));
+    let soft = { skipped: true, clicked: 0, called: 0, waitMs: 0, searchEnter: false };
+    if (options.softAlreadyOk) {
+      // Soft-refresh уже сделал background (Enter в поиске) — считаем снимок свежим.
+      soft = { skipped: false, clicked: 0, called: 0, waitMs: 0, searchEnter: true };
+    } else {
+      const wantSoft =
+        options.forceSoftRefresh === true ||
+        (options.skipSoftRefresh !== true && document.hidden);
+      if (wantSoft) {
+        soft = await softRefreshDashboard(Boolean(options.forceSoftRefresh));
+      }
     }
 
     const pagerTotal = readExpectedRowCount();
 
     // Model — полный список; DOM — точные дата и СОС
     const modelTasks = collectFromGridModel();
+    const excludedInstances = collectExcludedInstancesFromGridModel();
     const domTasks = await collectGridTasks();
     const seen = new Map();
 
-    const softOk = soft && soft.skipped === false && ((soft.clicked || 0) + (soft.called || 0) > 0);
-    // После успешного soft-refresh DOM/page — источник членства.
-    // Иначе model-only «призраки» остаются после отработки заявки.
+    const softActed =
+      soft &&
+      soft.skipped === false &&
+      (Boolean(soft.searchEnter) ||
+        (soft.clicked || 0) + (soft.called || 0) > 0);
+    // После успешного soft-refresh модель — полный актуальный список (membership + ACTIVATED).
+    // DOM только обогащает уже найденные id (дата/СОС с экрана), но не добавляет «призраков».
+    const preferModelMembership = softActed && modelTasks.length > 0;
     const preferDomMembership =
-      softOk ||
-      (pagerTotal &&
-        domTasks.length > 0 &&
-        domTasks.length >= Math.min(pagerTotal, 30) * 0.85);
+      !preferModelMembership &&
+      (softActed ||
+        (pagerTotal &&
+          domTasks.length > 0 &&
+          domTasks.length >= Math.min(pagerTotal, 30) * 0.85));
 
-    if (preferDomMembership && domTasks.length) {
-      for (const task of domTasks) {
+    if (preferModelMembership) {
+      for (const task of modelTasks) {
         seen.set(task.id, { ...task });
       }
-      for (const task of modelTasks) {
+      for (const task of domTasks) {
         if (!seen.has(task.id)) continue;
-        seen.set(task.id, mergeTaskRecords(seen.get(task.id), task));
+        const base = seen.get(task.id);
+        const merged = mergeTaskRecords(base, task);
+        // DOM не должен откатывать более свежую ACTIVATED из модели
+        const tsBase = base.appearedAt ?? (base.date ? parsePageDate(base.date) : null);
+        const tsDom = task.appearedAt ?? (task.date ? parsePageDate(task.date) : null);
+        if (tsBase != null && tsDom != null && tsBase > tsDom) {
+          merged.date = base.date;
+          merged.appearedAt = base.appearedAt;
+          merged.dateSource = base.dateSource || 'model';
+        }
+        seen.set(task.id, merged);
+      }
+    } else if (preferDomMembership && domTasks.length) {
+      for (const task of domTasks) {
+        seen.set(task.id, { ...task });
       }
     } else {
       for (const task of modelTasks) {
@@ -1317,12 +1513,20 @@
 
     return {
       tasks,
+      excludedInstances,
       pagerTotal: effectivePager,
       hidden: document.hidden,
-      source: domTasks.length ? 'dom' : modelTasks.length ? 'model' : 'none',
+      source: preferModelMembership
+        ? 'model'
+        : domTasks.length
+          ? 'dom'
+          : modelTasks.length
+            ? 'model'
+            : 'none',
       modelCount: modelTasks.length,
       domCount: domTasks.length,
-      softRefresh: soft
+      softRefresh: soft,
+      softRefreshOk: softActed
     };
   }
 

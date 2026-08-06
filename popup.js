@@ -119,6 +119,13 @@ function emptyStats() {
   return { green: 0, yellow: 0, red: 0, blue: 0, vols: 0, total: 0 };
 }
 
+/** Без экземпляра/клиента/адреса — клон-пустышка, даже если есть дата и СОС. */
+function hasRenderableTaskContext(task) {
+  return [task.instanceName, task.client, task.address].some((value) =>
+    String(value || '').trim()
+  );
+}
+
 function buildStats(history) {
   const stats = {
     prz: emptyStats(),
@@ -129,7 +136,7 @@ function buildStats(history) {
 
   for (const task of history) {
     const family = getStepFamily(task.type);
-    if (!family || !stats[family]) continue;
+    if (!family || !stats[family] || !hasRenderableTaskContext(task)) continue;
     const live = liveElapsed(task);
     const bucket = zoneBucket(live.zone || task.zone);
     stats[family][bucket] += 1;
@@ -198,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
       (t) =>
         getStepFamily(t.type) === activeTab &&
         String(t.title || '').trim() &&
+        hasRenderableTaskContext(t) &&
         !looksLikeSchemeLabel(t.client)
     );
   }
@@ -258,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="title">${escapeHtml(item.title || 'Без названия')}</div>
             ${item.client && !looksLikeSchemeLabel(item.client) ? `<div class="client">Клиент: ${escapeHtml(item.client)}</div>` : ''}
             ${item.address ? `<div class="client">Адрес: ${escapeHtml(item.address)}</div>` : ''}
-            ${item.date ? `<div class="date">Дата создания экземпляра: ${escapeHtml(item.date)}</div>` : '<div class="date">Дата создания экземпляра: не считана</div>'}
+            ${item.date ? `<div class="date">Дата получения заявки: ${escapeHtml(item.date)}</div>` : '<div class="date">Дата получения заявки: не считана</div>'}
             <div class="scheme">Схема: ${escapeHtml(schemeHint(item))}</div>
             <div class="timer-row">
               <span class="timer" data-timer-id="${escapeHtml(item.id)}">${escapeHtml(live.label)}</span>

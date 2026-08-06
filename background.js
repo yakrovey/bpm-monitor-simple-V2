@@ -11,7 +11,6 @@ import {
   supportsSchemeSwitch
 } from './timerEngine.js';
 import { isWorkTime, parseRussianDateTime } from './businessTime.js';
-import { pageFindTasks } from './pageScrape.js';
 import { ext } from './extApi.js';
 
 // BPM Monitor V2 — фон + рабочие таймеры
@@ -32,8 +31,6 @@ const SCRAPE_TIMEOUT_ACTIVE_MS = 28000;
 const SCRAPE_TIMEOUT_HIDDEN_MS = 55000;
 /** Не видели заявку в снимке дольше — снимаем даже при неполном scrape. */
 const STALE_TASK_REMOVE_MS = 90 * 1000;
-/** Защита от срыва колонки: не принимать дату старше сохранённой на много дней. */
-const MAX_APPEARED_AT_ROLLBACK_MS = 2 * 24 * 60 * 60 * 1000;
 
 let knownIds = new Set();
 let activeTasks = [];
@@ -208,32 +205,15 @@ function applyTimerNotifications(task, now = Date.now()) {
 }
 
 function resolveAppearedAt(incoming, prev, now) {
-  // Дата со страницы — главный источник. Fallback «сейчас» только если даты нет.
-  let candidate = null;
-
+  // Дата со страницы/модели — главный источник. Если пришла валидная — берём её.
+  // Старый «anti-rollback» оставлял июньские клоны, когда scrape уже отдавал июль.
   if (incoming.date) {
-    candidate = parseRussianDateTime(incoming.date);
+    const fromDate = parseRussianDateTime(incoming.date);
+    if (fromDate != null) return fromDate;
   }
-  if (
-    candidate == null &&
-    incoming.appearedAt &&
-    Number.isFinite(Number(incoming.appearedAt))
-  ) {
-    candidate = Number(incoming.appearedAt);
+  if (incoming.appearedAt && Number.isFinite(Number(incoming.appearedAt))) {
+    return Number(incoming.appearedAt);
   }
-
-  if (candidate != null && prev?.appearedAt) {
-    const rollbackMs = prev.appearedAt - candidate;
-    const prevFromPage =
-      Boolean(prev.date) &&
-      parseRussianDateTime(prev.date) === prev.appearedAt;
-    // Блокируем только скачок на дни назад при уже стабильной дате со страницы
-    if (prevFromPage && rollbackMs > MAX_APPEARED_AT_ROLLBACK_MS) {
-      return prev.appearedAt;
-    }
-  }
-
-  if (candidate != null) return candidate;
   if (prev?.appearedAt) return prev.appearedAt;
   return now;
 }
@@ -288,6 +268,16 @@ function cleanDisplayFields(task) {
   return next;
 }
 
+/**
+ * Реальная заявка должна иметь идентичность: экземпляр / клиент / адрес.
+ * Одной даты или СОС недостаточно — так появляются «клоны» с пустым клиентом.
+ */
+function hasTaskIdentity(task) {
+  return [task.instanceName, task.client, task.address].some((value) =>
+    String(value || '').trim()
+  );
+}
+
 function sanitizeTaskFields(task) {
   if (!task) return task;
   let next = cleanDisplayFields(task);
@@ -300,6 +290,7 @@ function sanitizeTaskFields(task) {
     .slice(1)
     .join('|')
     .trim();
+  if (!idTail) return null;
   if (looksLikeSchemeLabel(idTail)) return null;
   if (looksLikeSchemeLabel(String(next.instanceName || '').trim())) return null;
 
@@ -311,6 +302,7 @@ function sanitizeTaskFields(task) {
   ) {
     next.address = '';
   }
+  if (!hasTaskIdentity(next)) return null;
   return next;
 }
 
@@ -323,16 +315,29 @@ function repairActiveTasks() {
       changed = true;
       continue;
     }
+    const stableId = buildStableTaskId(
+      cleaned.title,
+      cleaned.instanceName || cleaned.client || ''
+    );
+    if (stableId && cleaned.id !== stableId) {
+      cleaned.id = stableId;
+      changed = true;
+    }
     if (cleaned.client !== task.client ||
       cleaned.instanceName !== task.instanceName ||
       cleaned.title !== task.title ||
-      cleaned.appearedAt !== task.appearedAt
+      cleaned.appearedAt !== task.appearedAt ||
+      cleaned.id !== task.id
     ) {
       changed = true;
     }
     next.push(cleaned);
   }
-  activeTasks = next.map((t) => reconcileNotifiedThresholds(t)).filter(Boolean);
+  const deduped = dedupeActiveTasksByProcess(
+    next.map((t) => reconcileNotifiedThresholds(t)).filter(Boolean)
+  );
+  if (deduped.length !== next.length) changed = true;
+  activeTasks = deduped;
   return changed;
 }
 
@@ -535,22 +540,98 @@ function createTrackedTask(incoming, now, { notifyAppear }) {
   return applyTimerNotifications(task, now);
 }
 
-function looksLikePartialScrape(incomingCount, prevCount, pagerTotal) {
+function looksLikePartialScrape(
+  incomingCount,
+  prevCount,
+  pagerTotal,
+  excludedCount = 0
+) {
   if (!bootstrapped || incomingCount === 0) return false;
-  // Явно знаем pager — не хватает строк (строго, без «90% достаточно»)
-  if (pagerTotal && incomingCount < pagerTotal) return true;
-  if (pagerTotal && incomingCount >= pagerTotal) return false;
-  if (prevCount === 0) return false;
-  if (incomingCount >= prevCount) return false;
+
+  // Неполный снимок = подозрительно пропало много УЖЕ отслеживаемых задач.
+  // Сам по себе pager (с «отложено» и чужими шагами) не повод сохранять stale.
+  const trackedDrop = prevCount - incomingCount;
+  if (trackedDrop <= 2) return false;
+
+  if (pagerTotal && incomingCount < pagerTotal) {
+    const pagerGap = pagerTotal - incomingCount;
+    const explainedGap = Math.max(0, Number(excludedCount) || 0);
+    if (pagerGap <= explainedGap + 2) return false;
+  }
+
   // Типичный сбой виртуального грида (~25 строк) при большем списке
-  if (incomingCount <= 30 && prevCount > incomingCount + 8) return true;
+  if (incomingCount <= 30 && trackedDrop > 8) return true;
   return incomingCount < prevCount * 0.7;
 }
 
-async function processTasks(tasks, { pagerTotal = null } = {}) {
+function extractProcessKey(instanceName) {
+  const text = String(instanceName || '');
+  const rias = text.match(/\b((?:RIAS|KRUS)-[A-Za-z0-9.-]+)\b/i);
+  if (rias) return rias[1].toUpperCase();
+  const bracket = text.match(/\[(\d+)\]\s*$/);
+  if (bracket) return `PI:${bracket[1]}`;
+  return '';
+}
+
+function buildStableTaskId(title, instanceName) {
+  const t = String(title || '').trim();
+  const proc = extractProcessKey(instanceName);
+  if (t && proc) return `${t}|${proc}`;
+  const inst = String(instanceName || '').trim();
+  return `${t}|${inst}`;
+}
+
+function normalizeInstanceIdentity(value) {
+  return String(value || '').trim();
+}
+
+function isExcludedIncoming(instanceName, excludedSet, excludedProcessKeys) {
+  const full = normalizeInstanceIdentity(instanceName);
+  if (full && excludedSet.has(full)) return true;
+  const proc = extractProcessKey(full);
+  return Boolean(proc && excludedProcessKeys.has(proc));
+}
+
+function dedupeActiveTasksByProcess(tasks) {
+  const byKey = new Map();
+  for (const task of tasks || []) {
+    const proc = extractProcessKey(task.instanceName);
+    const family = getStepFamily(task.title || task.type) || task.title || '';
+    const key = proc ? `${family}|${proc}` : task.id;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, task);
+      continue;
+    }
+    const tsPrev =
+      (prev.date && parseRussianDateTime(prev.date)) || prev.appearedAt || 0;
+    const tsNext =
+      (task.date && parseRussianDateTime(task.date)) || task.appearedAt || 0;
+    byKey.set(key, tsNext >= tsPrev ? task : prev);
+  }
+  return Array.from(byKey.values());
+}
+
+async function processTasks(
+  tasks,
+  { pagerTotal = null, excludedInstances = [], forceFullReplace = false } = {}
+) {
   const now = Date.now();
   const prevById = new Map(activeTasks.map((t) => [t.id, t]));
+  const prevByProcess = new Map();
+  for (const prev of activeTasks) {
+    const proc = extractProcessKey(prev.instanceName);
+    if (!proc) continue;
+    if (!prevByProcess.has(proc)) prevByProcess.set(proc, []);
+    prevByProcess.get(proc).push(prev);
+  }
   const prevCount = activeTasks.length;
+  const excludedSet = new Set(
+    (excludedInstances || []).map((value) => normalizeInstanceIdentity(value)).filter(Boolean)
+  );
+  const excludedProcessKeys = new Set(
+    [...excludedSet].map((value) => extractProcessKey(value)).filter(Boolean)
+  );
   const relevant = [];
   let skippedNoType = 0;
 
@@ -567,9 +648,10 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
       continue;
     }
     const type = getTaskType(sanitized.title);
-    const id =
-      sanitized.id ||
-      `${sanitized.title}|${sanitized.instanceName || sanitized.client || ''}`;
+    const id = buildStableTaskId(
+      sanitized.title,
+      sanitized.instanceName || sanitized.client || ''
+    );
     relevant.push({
       id,
       title: sanitized.title,
@@ -590,11 +672,13 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
   lastError = null;
 
   if (!bootstrapped) {
-    activeTasks = relevant.map((t) => {
-      const task = createTrackedTask(t, now, { notifyAppear: false });
-      knownIds.add(task.id);
-      return enrichTaskView(task, now);
-    });
+    activeTasks = dedupeActiveTasksByProcess(
+      relevant.map((t) => {
+        const task = createTrackedTask(t, now, { notifyAppear: false });
+        knownIds.add(task.id);
+        return enrichTaskView(task, now);
+      })
+    );
     bootstrapped = true;
     monitorStatus = 'monitoring';
     lastCheckMessage = `Первый снимок: ${activeTasks.length} задач ПРЗ/ФРЗ/ПКМ (из ${tasks.length} строк)`;
@@ -612,19 +696,37 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
   let newCount = 0;
   const next = [];
   const incomingIds = new Set();
-  const partialScrape = looksLikePartialScrape(
-    relevant.length,
-    prevCount,
-    pagerTotal
-  );
+  const incomingProcessKeys = new Set();
+  const consumedPrevIds = new Set();
+  const partialScrape =
+    !forceFullReplace &&
+    looksLikePartialScrape(
+      relevant.length,
+      prevCount,
+      pagerTotal,
+      excludedSet.size
+    );
 
   for (const incoming of relevant) {
+    if (isExcludedIncoming(incoming.instanceName, excludedSet, excludedProcessKeys)) {
+      continue;
+    }
     incomingIds.add(incoming.id);
-    const prev = prevById.get(incoming.id);
-    let task;
+    const proc = extractProcessKey(incoming.instanceName);
+    if (proc) incomingProcessKeys.add(proc);
 
+    let prev = prevById.get(incoming.id);
+    if (!prev && proc && prevByProcess.has(proc)) {
+      prev =
+        prevByProcess.get(proc).find((p) => p.title === incoming.title) ||
+        prevByProcess.get(proc)[0];
+    }
+    if (prev) consumedPrevIds.add(prev.id);
+
+    let task;
     if (prev) {
-      task = mergeExisting(prev, incoming, now);
+      task = mergeExisting(prev, { ...incoming, id: incoming.id }, now);
+      task.id = incoming.id;
       task = applyTimerNotifications(task, now);
     } else if (!knownIds.has(incoming.id)) {
       knownIds.add(incoming.id);
@@ -641,7 +743,13 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
   let keptStale = 0;
   if (partialScrape) {
     for (const prev of activeTasks) {
-      if (incomingIds.has(prev.id)) continue;
+      if (incomingIds.has(prev.id) || consumedPrevIds.has(prev.id)) continue;
+      if (isExcludedIncoming(prev.instanceName, excludedSet, excludedProcessKeys)) {
+        continue;
+      }
+      const proc = extractProcessKey(prev.instanceName);
+      // Тот же процесс уже пришёл с новым стабильным id — старый клон не сохраняем
+      if (proc && incomingProcessKeys.has(proc)) continue;
       const lastSeen = prev.lastSeenAt || prev.appearedAt || 0;
       if (now - lastSeen >= STALE_TASK_REMOVE_MS) continue;
       const kept = sanitizeTaskFields(prev);
@@ -652,7 +760,12 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
   }
 
   const removedCount = activeTasks.filter((t) => {
-    if (incomingIds.has(t.id)) return false;
+    if (incomingIds.has(t.id) || consumedPrevIds.has(t.id)) return false;
+    if (isExcludedIncoming(t.instanceName, excludedSet, excludedProcessKeys)) {
+      return true;
+    }
+    const proc = extractProcessKey(t.instanceName);
+    if (proc && incomingProcessKeys.has(proc)) return true;
     if (partialScrape) {
       const lastSeen = t.lastSeenAt || t.appearedAt || 0;
       return now - lastSeen >= STALE_TASK_REMOVE_MS;
@@ -660,11 +773,14 @@ async function processTasks(tasks, { pagerTotal = null } = {}) {
     return true;
   }).length;
 
-  activeTasks = next.map((t) => sanitizeTaskFields(t)).filter(Boolean);
+  activeTasks = dedupeActiveTasksByProcess(
+    next.map((t) => sanitizeTaskFields(t)).filter(Boolean)
+  );
   monitorStatus = 'monitoring';
   lastCheckMessage = `Обновлено: ${activeTasks.length} активных, новых: ${newCount}, строк с страницы: ${tasks.length}` +
     (pagerTotal ? `, pager: ${pagerTotal}` : '') +
     (removedCount ? `, снято: ${removedCount}` : '') +
+    (excludedSet.size ? `, исключено по шагу: ${excludedSet.size}` : '') +
     (partialScrape
       ? ` · неполный снимок${keptStale ? `, сохранено: ${keptStale}` : ''}`
       : '') +
@@ -970,6 +1086,45 @@ function taskDateRank(task) {
   return rank;
 }
 
+/**
+ * Дата для таймера: берём более свежую валидную.
+ * Фоновое окно монитора часто «заморожено» со старыми activation-датами,
+ * а активная вкладка агента уже показывает актуальный «получили».
+ */
+function pickPreferredDateFields(a, b) {
+  const tsA = a?.date ? parseRussianDateTime(a.date) : null;
+  const tsB = b?.date ? parseRussianDateTime(b.date) : null;
+
+  if (tsA != null && tsB != null && tsA !== tsB) {
+    const newer = tsB > tsA ? b : a;
+    const newerTs = tsB > tsA ? tsB : tsA;
+    return {
+      date: newer.date,
+      appearedAt: newer.appearedAt ?? newerTs,
+      dateSource: newer.dateSource || ''
+    };
+  }
+  if (tsA != null && tsB == null) {
+    return {
+      date: a.date,
+      appearedAt: a.appearedAt ?? tsA,
+      dateSource: a.dateSource || ''
+    };
+  }
+  if (tsB != null) {
+    return {
+      date: b.date,
+      appearedAt: b.appearedAt ?? tsB,
+      dateSource: b.dateSource || ''
+    };
+  }
+  return {
+    date: a?.date || b?.date || '',
+    appearedAt: a?.appearedAt ?? b?.appearedAt ?? null,
+    dateSource: a?.dateSource || b?.dateSource || ''
+  };
+}
+
 function pickBetterScrapedTask(a, b) {
   if (!a) return b;
   if (!b) return a;
@@ -984,10 +1139,10 @@ function pickBetterScrapedTask(a, b) {
   });
   merged.client = pickScrapedText(a.client, b.client, { rejectScheme: true });
   merged.address = pickScrapedText(a.address, b.address);
-  merged.date = (b.dateSource === 'dom' && b.date) || a.date || b.date || '';
-  merged.appearedAt = b.appearedAt ?? a.appearedAt ?? null;
-  merged.dateSource =
-    (b.date && b.dateSource) || (a.date && a.dateSource) || b.dateSource || a.dateSource || '';
+  const preferred = pickPreferredDateFields(a, b);
+  merged.date = preferred.date;
+  merged.appearedAt = preferred.appearedAt;
+  merged.dateSource = preferred.dateSource;
   merged.sos = b.sos || a.sos || '';
   return merged;
 }
@@ -996,9 +1151,43 @@ function mergeScrapedTasks(lists) {
   const byId = new Map();
   for (const list of lists) {
     for (const raw of list || []) {
-      const id = raw.id || `${raw.title}|${raw.instanceName || raw.client || ''}`;
+      const id =
+        raw.id ||
+        buildStableTaskId(raw.title, raw.instanceName || raw.client || '');
       const task = { ...raw, id };
       byId.set(id, pickBetterScrapedTask(byId.get(id), task));
+    }
+  }
+  return Array.from(byId.values());
+}
+
+/**
+ * Источник истины по membership: базовый список задаёт набор id,
+ * дополнительные списки только обогащают поля (клиент/СОС/дата…), но не
+ * «воскрешают» снятые задачи. Дату берём более свежую из base/extra —
+ * иначе замороженный dedicated перетирает актуальные даты с вкладки агента.
+ */
+function mergeScrapedTasksByMembership(baseList, extraLists = []) {
+  const byId = new Map();
+  for (const raw of baseList || []) {
+    const id =
+      raw.id ||
+      buildStableTaskId(raw.title, raw.instanceName || raw.client || '');
+    byId.set(id, { ...raw, id });
+  }
+  for (const list of extraLists) {
+    for (const raw of list || []) {
+      const id =
+        raw.id ||
+        buildStableTaskId(raw.title, raw.instanceName || raw.client || '');
+      if (!byId.has(id)) continue;
+      const base = byId.get(id);
+      const merged = pickBetterScrapedTask(base, { ...raw, id });
+      const preferred = pickPreferredDateFields(base, raw);
+      merged.date = preferred.date;
+      merged.appearedAt = preferred.appearedAt;
+      merged.dateSource = preferred.dateSource;
+      byId.set(id, merged);
     }
   }
   return Array.from(byId.values());
@@ -1015,36 +1204,92 @@ async function injectGridScraper(tabId) {
   }
 }
 
-async function scrapeViaScripting(tabId) {
+async function scrapeViaScripting(tabId, { softAlreadyOk = false } = {}) {
   await injectGridScraper(tabId);
   try {
     const results = await ext.scripting.executeScript({
       target: { tabId, allFrames: true },
-      func: pageFindTasks
+      func: async (opts) => {
+        const fn = globalThis.__bpmCollectTasks;
+        if (typeof fn !== 'function') {
+          return {
+            tasks: [],
+            excludedInstances: [],
+            pagerTotal: null,
+            hidden: true,
+            softRefreshOk: false
+          };
+        }
+        return fn(opts);
+      },
+      args: [
+        softAlreadyOk
+          ? { skipSoftRefresh: true, softAlreadyOk: true }
+          : { skipSoftRefresh: false }
+      ]
     });
 
-    let merged = [];
+    const framePayloads = [];
     let pagerTotal = null;
     for (const item of results || []) {
       const payload = item.result;
       if (!payload) continue;
       const tasks = Array.isArray(payload) ? payload : payload.tasks || [];
+      framePayloads.push({
+        tasks,
+        excludedInstances: payload.excludedInstances || [],
+        source: payload.source || 'none',
+        domCount: payload.domCount || 0,
+        modelCount: payload.modelCount || 0,
+        softRefreshOk: Boolean(payload.softRefreshOk || softAlreadyOk)
+      });
       if (payload.pagerTotal && (!pagerTotal || payload.pagerTotal > pagerTotal)) {
         pagerTotal = payload.pagerTotal;
       }
-      merged = mergeScrapedTasks([merged, tasks]);
     }
-    return { tasks: merged, pagerTotal };
+    const hasDomFrame = framePayloads.some(
+      (p) => (p.domCount || 0) > 0 || p.source === 'dom' || p.source === 'model'
+    );
+    const softRefreshOk =
+      softAlreadyOk || framePayloads.some((p) => p.softRefreshOk);
+    const selected =
+      softRefreshOk || !hasDomFrame
+        ? framePayloads
+        : framePayloads.filter(
+            (p) => (p.domCount || 0) > 0 || p.source === 'dom' || p.source === 'model'
+          );
+
+    let merged = [];
+    const excluded = new Set();
+    for (const payload of selected) {
+      merged = mergeScrapedTasks([merged, payload.tasks || []]);
+      for (const instanceName of payload.excludedInstances || []) {
+        const key = normalizeInstanceIdentity(instanceName);
+        if (key) excluded.add(key);
+      }
+    }
+    return {
+      tasks: merged,
+      excludedInstances: Array.from(excluded),
+      pagerTotal,
+      hasDomFrame: hasDomFrame || softRefreshOk,
+      softRefreshOk
+    };
   } catch (err) {
     console.warn('scripting scrape failed:', err);
-    return { tasks: [], pagerTotal: null };
+    return {
+      tasks: [],
+      excludedInstances: [],
+      pagerTotal: null,
+      hasDomFrame: false,
+      softRefreshOk: false
+    };
   }
 }
 
 function collectTasksFromTab(tabId, timeoutMs = 15000) {
   return new Promise((resolve) => {
-    const collected = [];
-    const seen = new Set();
+    const framePayloads = [];
     let pagerTotal = null;
 
     function onMessage(request, sender) {
@@ -1053,12 +1298,14 @@ function collectTasksFromTab(tabId, timeoutMs = 15000) {
       if (request.pagerTotal && (!pagerTotal || request.pagerTotal > pagerTotal)) {
         pagerTotal = request.pagerTotal;
       }
-      for (const task of request.tasks || []) {
-        const id = task.id || `${task.title}|${task.instanceName || task.client || ''}`;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        collected.push(task);
-      }
+      framePayloads.push({
+        tasks: request.tasks || [],
+        excludedInstances: request.excludedInstances || [],
+        source: request.source || 'none',
+        domCount: request.domCount || 0,
+        modelCount: request.modelCount || 0,
+        softRefreshOk: Boolean(request.softRefreshOk)
+      });
     }
 
     ext.runtime.onMessage.addListener(onMessage);
@@ -1068,7 +1315,30 @@ function collectTasksFromTab(tabId, timeoutMs = 15000) {
 
     setTimeout(() => {
       ext.runtime.onMessage.removeListener(onMessage);
-      resolve({ tasks: collected, pagerTotal });
+      const hasDomFrame = framePayloads.some(
+        (p) => (p.domCount || 0) > 0 || p.source === 'dom'
+      );
+      const softRefreshOk = framePayloads.some((p) => p.softRefreshOk);
+      const selected =
+        softRefreshOk || !hasDomFrame
+          ? framePayloads
+          : framePayloads.filter((p) => (p.domCount || 0) > 0 || p.source === 'dom');
+      let merged = [];
+      const excluded = new Set();
+      for (const payload of selected) {
+        merged = mergeScrapedTasks([merged, payload.tasks || []]);
+        for (const instanceName of payload.excludedInstances || []) {
+          const key = normalizeInstanceIdentity(instanceName);
+          if (key) excluded.add(key);
+        }
+      }
+      resolve({
+        tasks: merged,
+        excludedInstances: Array.from(excluded),
+        pagerTotal,
+        hasDomFrame: hasDomFrame || softRefreshOk,
+        softRefreshOk
+      });
     }, timeoutMs);
   });
 }
@@ -1097,14 +1367,25 @@ async function doScrapeTab(
       await softRefreshTab(tabId);
     }
     const fromContent = await collectTasksFromTab(tabId, timeoutMs);
-    const scripted = await scrapeViaScripting(tabId);
+    const scripted = await scrapeViaScripting(tabId, {
+      softAlreadyOk: softRefresh
+    });
     const tasks = mergeScrapedTasks([
       fromContent.tasks || [],
       scripted.tasks || []
     ]);
+    const excludedInstances = Array.from(
+      new Set([...(fromContent.excludedInstances || []), ...(scripted.excludedInstances || [])])
+    );
+    const softRefreshOk = Boolean(
+      softRefresh || fromContent.softRefreshOk || scripted.softRefreshOk
+    );
+    const hasDomFrame = Boolean(
+      fromContent.hasDomFrame || scripted.hasDomFrame || softRefreshOk
+    );
     const pagerTotal =
       Math.max(scripted.pagerTotal || 0, fromContent.pagerTotal || 0) || null;
-    return { tasks, pagerTotal };
+    return { tasks, excludedInstances, pagerTotal, hasDomFrame, softRefreshOk };
   } finally {
     await restoreMonitorWindowFocus(previousWindowId);
   }
@@ -1119,27 +1400,26 @@ async function requestTasksFromTab() {
   );
 
   let pagerTotal = null;
-  const scrapeLists = [];
+  let userResult = null;
 
   if (userVisible) {
     // Активная вкладка пользователя: только чтение, без wake/refresh (не сбиваем UX)
-    const userResult = await doScrapeTab(
+    userResult = await doScrapeTab(
       userVisible.id,
       SCRAPE_TIMEOUT_ACTIVE_MS,
       { wakeWindow: false, softRefresh: false, tab: userVisible }
     );
-    scrapeLists.push(userResult.tasks || []);
     pagerTotal = userResult.pagerTotal;
   }
 
-  // Фоновое окно монитора: soft-refresh (Enter в поиске) БЕЗ смены фокуса окна —
-  // иначе Chromium шлёт «Окно … ожидает»
+  // Фоновое окно монитора: soft-refresh (Enter в поиске) БЕЗ смены фокуса —
+  // иначе Chromium шлёт «Окно … ожидает» и вытаскивает окно на передний план.
+  // Membership берём с dedicated после soft-refresh; user-вкладка только обогащает поля.
   const dedicatedResult = await doScrapeTab(
     dedicatedTab.id,
     Math.min(SCRAPE_TIMEOUT_HIDDEN_MS, 22000),
     { wakeWindow: false, softRefresh: true, tab: dedicatedTab }
   );
-  scrapeLists.push(dedicatedResult.tasks || []);
   if (
     dedicatedResult.pagerTotal &&
     (!pagerTotal || dedicatedResult.pagerTotal > pagerTotal)
@@ -1147,11 +1427,35 @@ async function requestTasksFromTab() {
     pagerTotal = dedicatedResult.pagerTotal;
   }
 
-  const merged = mergeScrapedTasks(scrapeLists);
+  const merged =
+    dedicatedResult.tasks && dedicatedResult.tasks.length
+      ? mergeScrapedTasksByMembership(
+          dedicatedResult.tasks,
+          userResult ? [userResult.tasks || []] : []
+        )
+      : mergeScrapedTasks([
+          userResult?.tasks || [],
+          dedicatedResult.tasks || []
+        ]);
 
   await ext.storage.local.set({ [MONITOR_TAB_STORAGE_KEY]: dedicatedTab.id });
   cachedMonitorTabId = dedicatedTab.id;
-  return { tasks: merged, pagerTotal };
+  return {
+    tasks: merged,
+    excludedInstances: Array.from(
+      new Set([
+        ...(dedicatedResult.excludedInstances || []),
+        ...(userResult?.excludedInstances || [])
+      ])
+    ),
+    pagerTotal,
+    hasDomFrame: Boolean(
+      dedicatedResult.hasDomFrame ||
+        userResult?.hasDomFrame ||
+        dedicatedResult.softRefreshOk
+    ),
+    softRefreshOk: Boolean(dedicatedResult.softRefreshOk)
+  };
 }
 
 async function runCheck(reason = 'alarm') {
@@ -1209,10 +1513,37 @@ async function runCheckImpl(reason = 'alarm') {
   lastRunCheckAt = now;
   console.debug(`🔍 Проверка (${reason})`);
   try {
-    const { tasks, pagerTotal } = await requestTasksFromTab();
+    const { tasks, excludedInstances, pagerTotal, hasDomFrame, softRefreshOk } =
+      await requestTasksFromTab();
 
-    if (tasks.length) {
-      const result = await processTasks(tasks, { pagerTotal });
+    if (!hasDomFrame) {
+      if (activeTasks.length) {
+        await refreshTimersOnly();
+      }
+      monitorStatus = 'monitoring';
+      lastCheckAt = Date.now();
+      lastError = null;
+      lastCheckMessage =
+        activeTasks.length > 0
+          ? `DOM не считан, список не обновлён (${activeTasks.length}). Оставлены текущие задачи до следующего валидного снимка.`
+          : 'DOM не считан. Откройте дашборд 13202 и повторите проверку.';
+      await saveState();
+      return {
+        ok: true,
+        skipped: true,
+        total: activeTasks.length,
+        scraped: 0,
+        domMissing: true,
+        message: lastCheckMessage
+      };
+    }
+
+    if (tasks.length || (excludedInstances && excludedInstances.length)) {
+      const result = await processTasks(tasks, {
+        pagerTotal,
+        excludedInstances,
+        forceFullReplace: Boolean(softRefreshOk)
+      });
       return { ok: true, ...result };
     }
 

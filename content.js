@@ -4,7 +4,9 @@ const ext = globalThis.browser ?? globalThis.chrome;
 
 async function collectTasksOnPage() {
   const fn = globalThis.__bpmCollectTasks;
-  if (typeof fn !== 'function') return { tasks: [], pagerTotal: null, hidden: document.hidden };
+  if (typeof fn !== 'function') {
+    return { tasks: [], excludedInstances: [], pagerTotal: null, hidden: document.hidden };
+  }
   return fn();
 }
 
@@ -21,8 +23,13 @@ ext.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       {
         action: 'frameTasks',
         tasks,
+        excludedInstances: result.excludedInstances || [],
         pagerTotal: result.pagerTotal ?? null,
-        href: location.href
+        href: location.href,
+        source: result.source || 'none',
+        domCount: result.domCount || 0,
+        modelCount: result.modelCount || 0,
+        softRefreshOk: Boolean(result.softRefreshOk)
       },
       () => {
         void ext.runtime.lastError;
@@ -32,8 +39,13 @@ ext.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     sendResponse({
       status: 'ok',
       tasks,
+      excludedInstances: result.excludedInstances || [],
       pagerTotal: result.pagerTotal ?? null,
-      href: location.href
+      href: location.href,
+      source: result.source || 'none',
+      domCount: result.domCount || 0,
+      modelCount: result.modelCount || 0,
+      softRefreshOk: Boolean(result.softRefreshOk)
     });
   });
 
